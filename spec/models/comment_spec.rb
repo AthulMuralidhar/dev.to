@@ -3,13 +3,13 @@ require "rails_helper"
 RSpec.describe Comment, type: :model do
   let_it_be(:user) { create(:user) }
   let_it_be(:article) { create(:article, user: user) }
-  let_it_be(:comment) { create(:comment, user: user, commentable: article) }
+  let_it_be_changeable(:comment) { create(:comment, user: user, commentable: article) }
 
   include_examples "#sync_reactions_count", :article_comment
 
   describe "validations" do
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to belong_to(:commentable) }
+    it { is_expected.to belong_to(:commentable).optional }
     it { is_expected.to have_many(:reactions).dependent(:destroy) }
     it { is_expected.to have_many(:mentions).dependent(:destroy) }
     it { is_expected.to have_many(:notifications).dependent(:delete_all) }
@@ -35,6 +35,28 @@ RSpec.describe Comment, type: :model do
       subject.commentable = build(:article, published: false)
       expect(subject).not_to be_valid
       # rubocop:enable RSpec/NamedSubject
+    end
+
+    describe "#after_commit" do
+      it "on update enqueues job to index comment to elasticsearch" do
+        sidekiq_assert_enqueued_with(job: Search::IndexToElasticsearchWorker, args: [described_class.to_s, comment.search_id]) do
+          comment.save
+        end
+      end
+
+      it "on destroy enqueues job to delete comment from elasticsearch" do
+        comment = create(:comment)
+
+        sidekiq_assert_enqueued_with(job: Search::RemoveFromElasticsearchIndexWorker, args: [described_class::SEARCH_CLASS.to_s, comment.search_id]) do
+          comment.destroy
+        end
+      end
+    end
+
+    describe "#search_id" do
+      it "returns comment_ID" do
+        expect(comment.search_id).to eq("comment_#{comment.id}")
+      end
     end
 
     describe "#processed_html" do
@@ -191,11 +213,10 @@ RSpec.describe Comment, type: :model do
       expect(comment.title(5).length).to eq(5)
     end
 
-    it "retains content from #processed_html" do
-      comment.processed_html = "Hello this is a post." # Remove randomness
+    it "gets content from body_markdown" do
+      comment.body_markdown = "Migas fingerstache pbr&b tofu."
       comment.validate!
-      text = comment.title.gsub("...", "").delete("\n")
-      expect(comment.processed_html).to include(CGI.unescapeHTML(text))
+      expect(comment.title).to eq("Migas fingerstache pbr&b tofu.")
     end
 
     it "is converted to deleted if the comment is deleted" do
@@ -205,15 +226,9 @@ RSpec.describe Comment, type: :model do
 
     it "does not contain the wrong encoding" do
       comment.body_markdown = "It's the best post ever. It's so great."
+
       comment.validate!
       expect(comment.title).not_to include("&#39;")
-    end
-  end
-
-  describe "#index_id" do
-    it "is equal to comments-ID" do
-      # NOTE: we shouldn't test private things but cheating a bit for Algolia here
-      expect(comment.send(:index_id)).to eq("comments-#{comment.id}")
     end
   end
 
@@ -246,6 +261,96 @@ RSpec.describe Comment, type: :model do
     end
   end
 
+  context "when callbacks are triggered after create" do
+    let(:comment) { build(:comment, user: user, commentable: article) }
+
+    it "creates an id code" do
+      comment.save
+
+      expect(comment.reload.id_code).to eq(comment.id.to_s(26))
+    end
+
+    it "enqueue a worker to create the first reaction" do
+      expect do
+        comment.save
+      end.to change(Comments::CreateFirstReactionWorker.jobs, :size).by(1)
+    end
+
+    it "enqueues a worker to calculate comment score" do
+      expect do
+        comment.save
+      end.to change(Comments::CalculateScoreWorker.jobs, :size).by(1)
+    end
+
+    it "enqueues a worker to send email" do
+      comment.save!
+      child_comment_user = create(:user)
+      child_comment = build(:comment, parent: comment, user: child_comment_user, commentable: article)
+
+      expect do
+        child_comment.save!
+      end.to change(Comments::SendEmailNotificationWorker.jobs, :size).by(1)
+    end
+
+    it "enqueues a worker to bust comment cache" do
+      expect do
+        comment.save
+      end.to change(Comments::BustCacheWorker.jobs, :size).by(1)
+    end
+
+    it "touches user updated_at" do
+      user.updated_at = 1.month.ago
+      user.save
+
+      expect { comment.save }.to change(user, :updated_at)
+    end
+
+    it "touches user last_comment_at" do
+      user.last_comment_at = 1.month.ago
+      user.save
+
+      expect { comment.save }.to change(user, :last_comment_at)
+    end
+
+    describe "slack notifications" do
+      before do
+        # making sure there are no other enqueued jobs from other tests
+        sidekiq_perform_enqueued_jobs(only: SlackBotPingWorker)
+      end
+
+      it "notifies proper slack channel when a warned user leaves a comment" do
+        user = create(:user)
+        user.add_role(:warned)
+        comment = create(:comment, user: user, commentable: article)
+
+        url = "#{ApplicationConfig['APP_PROTOCOL']}#{ApplicationConfig['APP_DOMAIN']}"
+        message = <<~MESSAGE.chomp
+          Activity: #{url}#{comment.path}
+          Comment text: #{comment.body_markdown.truncate(300)}
+          ---
+          Manage commenter - @#{user.username}: #{url}/internal/users/#{user.id}
+        MESSAGE
+
+        args = {
+          message: message,
+          channel: "warned-user-comments",
+          username: "sloan_watch_bot",
+          icon_emoji: ":sloan:"
+        }.stringify_keys
+
+        sidekiq_assert_enqueued_jobs(1, only: SlackBotPingWorker)
+        job = sidekiq_enqueued_jobs(worker: SlackBotPingWorker).last
+        expect(job["args"]).to eq([args])
+      end
+
+      it "does not send notification if a regular user leaves a comment" do
+        sidekiq_assert_no_enqueued_jobs(only: SlackBotPingWorker) do
+          create(:comment, commentable: article, user: user)
+        end
+      end
+    end
+  end
+
   context "when callbacks are triggered before save" do
     it "generates character count before saving" do
       comment.save
@@ -255,6 +360,7 @@ RSpec.describe Comment, type: :model do
 
   context "when callbacks are triggered after save" do
     it "updates user last comment date" do
+      comment = build(:comment, commentable: article, user: user)
       expect { comment.save }.to change(user, :last_comment_at)
     end
   end
@@ -262,7 +368,7 @@ RSpec.describe Comment, type: :model do
   context "when callbacks are triggered after update" do
     it "deletes the comment's notifications when deleted is set to true" do
       create(:notification, notifiable: comment, user: user)
-      perform_enqueued_jobs do
+      sidekiq_perform_enqueued_jobs do
         comment.update(deleted: true)
       end
       expect(comment.notifications).to be_empty
@@ -272,7 +378,7 @@ RSpec.describe Comment, type: :model do
       comment = create(:comment, commentable: article)
       child_comment = create(:comment, parent: comment, commentable: article, user: user)
       create(:notification, notifiable: child_comment, user: user)
-      perform_enqueued_jobs do
+      sidekiq_perform_enqueued_jobs do
         comment.update(deleted: true)
       end
       notification = child_comment.notifications.first
@@ -281,33 +387,16 @@ RSpec.describe Comment, type: :model do
   end
 
   context "when callbacks are triggered after destroy" do
+    let!(:comment) { create(:comment, user: user, commentable: article) }
+
     it "updates user's last_comment_at" do
+      comment = create(:comment, user: user)
       expect { comment.destroy }.to change(user, :last_comment_at)
     end
-  end
 
-  describe "when indexing and deindexing" do
-    let!(:comment) { create(:comment, commentable: article) }
-
-    context "when destroying" do
-      it "doesn't trigger auto removal from index" do
-        expect { comment.destroy }.not_to have_enqueued_job.on_queue("algoliasearch")
-      end
-    end
-
-    context "when deleted is false" do
-      it "checks auto-indexing" do
-        expect do
-          create(:comment, commentable: article)
-        end.to have_enqueued_job.with(kind_of(described_class), "index!").on_queue("algoliasearch")
-      end
-    end
-
-    context "when deleted is true" do
-      it "checks auto-deindexing" do
-        expect do
-          comment.update(deleted: true)
-        end.to have_enqueued_job.with(kind_of(described_class), "remove_algolia_index").on_queue("algoliasearch")
+    it "busts the comment cache" do
+      sidekiq_assert_enqueued_with(job: Comments::BustCacheWorker, args: [comment.id]) do
+        comment.destroy
       end
     end
   end

@@ -1,5 +1,9 @@
 class PodcastEpisode < ApplicationRecord
   include AlgoliaSearch
+  include Searchable
+
+  SEARCH_SERIALIZER = Search::PodcastEpisodeSerializer
+  SEARCH_CLASS = Search::FeedContent
 
   acts_as_taggable
 
@@ -23,6 +27,9 @@ class PodcastEpisode < ApplicationRecord
   after_destroy :purge, :purge_all
   after_save    :bust_cache
 
+  after_commit :index_to_elasticsearch, on: %i[create update]
+  after_commit :remove_from_elasticsearch, on: [:destroy]
+
   before_validation :process_html_and_prefix_all_images
 
   scope :reachable, -> { where(reachable: true) }
@@ -42,7 +49,7 @@ class PodcastEpisode < ApplicationRecord
       attribute :user do
         { name: podcast.name,
           username: user_username,
-          profile_image_90: ProfileImage.new(user).get(90) }
+          profile_image_90: ProfileImage.new(user).get(width: 90) }
       end
       searchableAttributes ["unordered(title)",
                             "body_text",
@@ -54,6 +61,10 @@ class PodcastEpisode < ApplicationRecord
       attributesForFaceting [:class_name]
       customRanking ["desc(search_score)", "desc(hotness_score)"]
     end
+  end
+
+  def search_id
+    "podcast_episode_#{id}"
   end
 
   def user_username
@@ -98,10 +109,6 @@ class PodcastEpisode < ApplicationRecord
     ActionView::Base.full_sanitizer.sanitize(processed_html)
   end
 
-  def published_at_date_slashes
-    published_at&.to_date&.strftime("%m/%d/%Y")
-  end
-
   def user
     podcast
   end
@@ -133,6 +140,14 @@ class PodcastEpisode < ApplicationRecord
     []
   end
 
+  def mobile_player_metadata
+    {
+      podcastName: podcast.title,
+      episodeName: title,
+      podcastImageUrl: ApplicationController.helpers.app_url(podcast.image_url)
+    }
+  end
+
   private
 
   def index_id
@@ -140,7 +155,7 @@ class PodcastEpisode < ApplicationRecord
   end
 
   def bust_cache
-    PodcastEpisodes::BustCacheJob.perform_later(id, path, podcast_slug)
+    PodcastEpisodes::BustCacheWorker.perform_async(id, path, podcast_slug)
   end
 
   def process_html_and_prefix_all_images

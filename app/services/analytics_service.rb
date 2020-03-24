@@ -26,7 +26,7 @@ class AnalyticsService
     cache_key = "analytics-for-dates-#{start_date}-#{end_date}-#{user_or_org.class.name}-#{user_or_org.id}"
     cache_key = "#{cache_key}-article-#{article_id}" if article_id
 
-    RedisRailsCache.fetch(cache_key, expires_in: 7.days) do
+    Rails.cache.fetch(cache_key, expires_in: 7.days) do
       # 1. calculate all stats using group queries at once
       comments_stats_per_day = calculate_comments_stats_per_day(comment_data)
       follows_stats_per_day = calculate_follows_stats_per_day(follow_data)
@@ -85,9 +85,8 @@ class AnalyticsService
       where("score > 0")
     @follow_data = Follow.
       where(followable_type: user_or_org.class.name, followable_id: user_or_org.id)
-    @reaction_data = Reaction.
-      where(reactable_id: article_ids, reactable_type: "Article").
-      where("points > 0")
+    @reaction_data = Reaction.positive.
+      where(reactable_id: article_ids, reactable_type: "Article")
     @page_view_data = PageView.where(article_id: article_ids)
 
     # filter data by date if needed
