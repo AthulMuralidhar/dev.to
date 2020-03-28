@@ -81,23 +81,29 @@ class Article < ApplicationRecord
 
   before_destroy :before_destroy_actions, prepend: true
 
-  serialize :ids_for_suggested_articles
   serialize :cached_user
   serialize :cached_organization
 
   scope :published, -> { where(published: true) }
   scope :unpublished, -> { where(published: false) }
 
+  scope :admin_published_with, lambda { |tag_name|
+    published.
+      where(user_id: SiteConfig.staff_user_id).
+      order(published_at: :desc).
+      tagged_with(tag_name)
+  }
+
   scope :cached_tagged_with, ->(tag) { where("cached_tag_list ~* ?", "^#{tag},| #{tag},|, #{tag}$|^#{tag}$") }
 
   scope :cached_tagged_by_approval_with, ->(tag) { cached_tagged_with(tag).where(approved: true) }
 
   scope :active_help, lambda {
-                        published.
-                          cached_tagged_with("help").
-                          order("created_at DESC").
-                          where("published_at > ? AND comments_count < ? AND score > ?", 12.hours.ago, 6, -4)
-                      }
+    published.
+      cached_tagged_with("help").
+      order(created_at: :desc).
+      where("published_at > ? AND comments_count < ? AND score > ?", 12.hours.ago, 6, -4)
+  }
 
   scope :limited_column_select, lambda {
     select(:path, :title, :id, :published,
@@ -518,7 +524,6 @@ class Article < ApplicationRecord
     self.description = front_matter["description"] if front_matter["description"].present? || front_matter["title"].present? # Do this if frontmatte exists at all
     self.collection_id = nil if front_matter["title"].present?
     self.collection_id = Collection.find_series(front_matter["series"], user).id if front_matter["series"].present?
-    self.automatically_renew = front_matter["automatically_renew"] if front_matter["automatically_renew"].present? && tag_list.include?("hiring")
   end
 
   def determine_image(front_matter)
@@ -575,9 +580,9 @@ class Article < ApplicationRecord
   end
 
   def past_or_present_date
-    if published_at && published_at > Time.current
-      errors.add(:date_time, "must be entered in DD/MM/YYYY format with current or past date")
-    end
+    return unless published_at && published_at > Time.current
+
+    errors.add(:date_time, "must be entered in DD/MM/YYYY format with current or past date")
   end
 
   def canonical_url_must_not_have_spaces
@@ -613,9 +618,9 @@ class Article < ApplicationRecord
       self.cached_organization = OpenStruct.new(set_cached_object(organization))
     end
 
-    if user
-      self.cached_user = OpenStruct.new(set_cached_object(user))
-    end
+    return unless user
+
+    self.cached_user = OpenStruct.new(set_cached_object(user))
   end
 
   def set_cached_object(object)
