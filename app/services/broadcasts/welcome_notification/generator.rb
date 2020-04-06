@@ -11,7 +11,6 @@ module Broadcasts
       end
 
       def call
-        # TODO: [@thepracticaldev/delightful] Move this check into the rake task logic once it has been implemented.
         return unless user.subscribed_to_welcome_notifications?
 
         send_welcome_notification unless notification_enqueued
@@ -19,6 +18,8 @@ module Broadcasts
         send_feed_customization_notification unless notification_enqueued
         send_ux_customization_notification unless notification_enqueued
         send_discuss_and_ask_notification unless notification_enqueued
+      rescue ActiveRecord::RecordNotFound => e
+        Honeybadger.notify(e)
       end
 
       private
@@ -77,15 +78,15 @@ module Broadcasts
       end
 
       def welcome_broadcast
-        @welcome_broadcast ||= Broadcast.find_by(title: "Welcome Notification: welcome_thread")
+        @welcome_broadcast ||= Broadcast.active.find_by!(title: "Welcome Notification: welcome_thread")
       end
 
       def customize_ux_broadcast
-        @customize_ux_broadcast ||= Broadcast.find_by(title: "Welcome Notification: customize_experience")
+        @customize_ux_broadcast ||= Broadcast.active.find_by!(title: "Welcome Notification: customize_experience")
       end
 
       def customize_feed_broadcast
-        @customize_feed_broadcast ||= Broadcast.find_by(title: "Welcome Notification: customize_feed")
+        @customize_feed_broadcast ||= Broadcast.active.find_by!(title: "Welcome Notification: customize_feed")
       end
 
       def authentication_broadcast
@@ -104,7 +105,7 @@ module Broadcasts
         missing_identities = SiteConfig.authentication_providers.map do |provider|
           identities.exists?(provider: provider) ? nil : "#{provider}_connect"
         end.compact
-        Broadcast.find_by(title: "Welcome Notification: #{missing_identities.first}")
+        Broadcast.active.find_by!(title: "Welcome Notification: #{missing_identities.first}")
       end
 
       def find_discuss_ask_broadcast
@@ -115,7 +116,7 @@ module Broadcasts
                else
                  "discuss_and_ask"
                end
-        Broadcast.find_by(title: "Welcome Notification: #{type}")
+        Broadcast.active.find_by!(title: "Welcome Notification: #{type}")
       end
 
       def asked_a_question

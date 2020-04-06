@@ -28,13 +28,15 @@ class User < ApplicationRecord
     :add_credits, :remove_credits, :add_org_credits, :remove_org_credits, :ghostify
   )
 
-  rolify
+  rolify after_add: :index_roles, after_remove: :index_roles
+
   include AlgoliaSearch
   include Storext.model
   include Searchable
 
   SEARCH_SERIALIZER = Search::UserSerializer
   SEARCH_CLASS = Search::User
+  DATA_SYNC_CLASS = DataSync::Elasticsearch::User
 
   acts_as_followable
   acts_as_follower
@@ -198,6 +200,7 @@ class User < ApplicationRecord
 
   after_create_commit :send_welcome_notification, :estimate_default_language
   after_commit :index_to_elasticsearch, on: %i[create update]
+  after_commit :sync_related_elasticsearch_docs, on: %i[create update]
   after_commit :remove_from_elasticsearch, on: [:destroy]
 
   algoliasearch per_environment: true, enqueue: :trigger_delayed_index do
@@ -530,9 +533,9 @@ class User < ApplicationRecord
   end
 
   def send_welcome_notification
-    return unless (welcome_broadcast = Broadcast.find_by(title: "Welcome Notification"))
+    return unless (set_up_profile_broadcast = Broadcast.active.find_by(title: "Welcome Notification: set_up_profile"))
 
-    Notification.send_welcome_notification(id, welcome_broadcast.id)
+    Notification.send_welcome_notification(id, set_up_profile_broadcast.id)
   end
 
   def verify_twitter_username
@@ -709,5 +712,9 @@ class User < ApplicationRecord
     follower_relationships = Follow.followable_user(id)
     follower_relationships.destroy_all
     follows.destroy_all
+  end
+
+  def index_roles(_role)
+    index_to_elasticsearch_inline
   end
 end

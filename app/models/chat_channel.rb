@@ -78,7 +78,7 @@ class ChatChannel < ApplicationRecord
         channel.status = "active"
         channel.save
       else
-        create(
+        channel = create(
           channel_type: channel_type,
           channel_name: contrived_name,
           slug: slug,
@@ -86,12 +86,13 @@ class ChatChannel < ApplicationRecord
           status: "active",
         )
       end
+      channel
     end
   end
 
   def add_users(users)
     Array(users).each do |user|
-      ChatChannelMembership.create!(user_id: user.id, chat_channel_id: id)
+      ChatChannelMembership.find_or_create_by!(user_id: user.id, chat_channel_id: id)
     end
   end
 

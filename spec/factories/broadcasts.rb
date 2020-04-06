@@ -2,6 +2,12 @@ FactoryBot.define do
   factory :broadcast do
     active { true }
 
+    factory :set_up_profile_broadcast do
+      title          { "Welcome Notification: set_up_profile" }
+      type_of        { "Welcome" }
+      processed_html { "Welcome to DEV! 👋 I'm <a href='https://dev.to/sloan'>Sloan</a>, the community mascot and I'm here to help get you started. Let's begin by <a href='https://dev.to/settings'>setting up your profile</a>!" }
+    end
+
     factory :welcome_broadcast do
       title          { "Welcome Notification: welcome_thread" }
       type_of        { "Welcome" }
@@ -48,13 +54,6 @@ FactoryBot.define do
       title          { "Welcome Notification: discuss_and_ask" }
       type_of        { "Welcome" }
       processed_html { "Sloan here! 👋 I noticed that you haven't <a href='https://dev.to/t/explainlikeimfive'>asked a question</a> or <a href='https://dev.to/t/discuss'>started a discussion</a> yet. It's easy to do both of these; just click on 'Write a Post' in the sidebar of the tag page to get started!" }
-    end
-
-    # TODO: [@thepracticaldev/delightful] Remove onboarding factory once welcome notifications are live.
-    factory :onboarding_broadcast do
-      title          { "Welcome Notification" }
-      type_of        { "Onboarding" }
-      processed_html { "Welcome! Introduce yourself in our <a href='/welcome'>welcome thread!</a>" }
     end
   end
 end

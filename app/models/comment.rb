@@ -27,7 +27,7 @@ class Comment < ApplicationRecord
   validates :commentable_type, inclusion: { in: %w[Article PodcastEpisode] }
   validates :user_id, presence: true
 
-  after_create :notify_slack_channel_about_warned_users, if: -> { user.warned }
+  after_create :notify_slack_channel_about_warned_users
   after_create :after_create_checks
   after_create_commit :record_field_test_event
   after_commit :calculate_score
@@ -185,7 +185,11 @@ class Comment < ApplicationRecord
   end
 
   def expire_root_fragment
-    root.touch
+    if root_exists?
+      root.touch
+    else
+      touch
+    end
   end
 
   def create_first_reaction
@@ -212,6 +216,10 @@ class Comment < ApplicationRecord
     user.touch(:last_comment_at)
     CacheBuster.bust(commentable.path.to_s) if commentable
     expire_root_fragment
+  end
+
+  def root_exists?
+    ancestry && Comment.exists?(id: ancestry)
   end
 
   def send_email_notification
@@ -248,20 +256,6 @@ class Comment < ApplicationRecord
   end
 
   def notify_slack_channel_about_warned_users
-    url = "#{ApplicationConfig['APP_PROTOCOL']}#{ApplicationConfig['APP_DOMAIN']}"
-
-    message = <<~MESSAGE.chomp
-      Activity: #{url}#{path}
-      Comment text: #{body_markdown.truncate(300)}
-      ---
-      Manage commenter - @#{user.username}: #{url}/internal/users/#{user.id}
-    MESSAGE
-
-    SlackBotPingWorker.perform_async(
-      message: message,
-      channel: "warned-user-comments",
-      username: "sloan_watch_bot",
-      icon_emoji: ":sloan:",
-    )
+    Slack::Messengers::CommentUserWarned.call(comment: self)
   end
 end
