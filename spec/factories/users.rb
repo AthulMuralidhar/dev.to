@@ -23,11 +23,15 @@ FactoryBot.define do
     email_digest_periodic        { false }
 
     trait :with_identity do
-      transient { identities { %i[github twitter] } }
+      transient { identities { Authentication::Providers.available } }
 
       after(:create) do |user, options|
         options.identities.each do |provider|
-          create(:identity, user: user, provider: provider)
+          auth = OmniAuth.config.mock_auth.fetch(provider.to_sym)
+          create(
+            :identity,
+            user: user, provider: provider, uid: auth.uid, auth_data_dump: auth,
+          )
         end
       end
     end
@@ -130,6 +134,14 @@ FactoryBot.define do
       after(:create) do |user|
         tag = create(:tag)
         user.add_role :tag_moderator, tag
+      end
+    end
+
+    trait :with_user_optional_fields do
+      after(:create) do |user|
+        create(:user_optional_field, user: user)
+        create(:user_optional_field, user: user, label: "another field1", value: "another value1")
+        create(:user_optional_field, user: user, label: "another field2", value: "another value2")
       end
     end
   end

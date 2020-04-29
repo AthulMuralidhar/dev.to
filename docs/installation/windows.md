@@ -51,8 +51,8 @@ git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
 echo 'export PATH="$HOME/.rbenv/plugins/ruby-build/bin:$PATH"' >> ~/.bashrc
 exec $SHELL
 
-rbenv install 2.7.0
-rbenv global 2.7.0
+rbenv install $(cat .ruby-version)
+rbenv global $(cat .ruby-version)
 ruby -v
 ```
 
@@ -162,9 +162,7 @@ NOTE: Make sure to download **the OSS version**, `elasticsearch-oss`.
 1. Set up your environment variables/secrets
 
    - Take a look at `Envfile`. This file lists all the `ENV` variables we use
-     and provides a fake default for any missing keys. You'll need to get your
-     own free [Algolia credentials](/backend/algolia) to get your development
-     environment running.
+     and provides a fake default for any missing keys.
    - The [backend guide](/backend) will show you how to get free API keys for
      additional services that may be required to run certain parts of the app.
    - For any key that you wish to enter/replace:

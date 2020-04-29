@@ -36,6 +36,9 @@ variable :REDIS_SIDEKIQ_URL, :String, default: "redis://localhost:6379"
 # Elasticsearch
 variable :ELASTICSEARCH_URL, :String, default: "http://localhost:9200"
 
+# SSL config
+variable :FORCE_SSL_IN_RAILS, :String, default: "not applicable in dev"
+
 ################################################
 ############## 3rd Party Services ##############
 ################################################
@@ -61,13 +64,6 @@ variable :TWITTER_SECRET, :String, default: "Optional"
 # (https://docs.honeybadger.io/lib/ruby/getting-started/introduction.html)
 variable :HONEYBADGER_API_KEY, :String, default: "Optional"
 variable :HONEYBADGER_JS_API_KEY, :String, default: "Optional"
-
-# Algolia for search (not optional)
-# (https://www.algolia.com/doc/)
-only_in_test = proc { ENV["RACK_ENV"] == "test" ? "test-test" : nil }
-variable :ALGOLIASEARCH_API_KEY, :String, default: only_in_test
-variable :ALGOLIASEARCH_APPLICATION_ID, :String, default: only_in_test
-variable :ALGOLIASEARCH_SEARCH_ONLY_KEY, :String, default: only_in_test
 
 # AWS for images storages
 variable :AWS_ID, :String, default: "Optional"
@@ -109,8 +105,9 @@ variable :HCTI_API_KEY, :String, default: "Optional"
 
 # Fastly for edge caching
 # (https://docs.fastly.com/api/)
-variable :FASTLY_API_KEY, :String, default: "Optional"
-variable :FASTLY_SERVICE_ID, :String, default: "Optional"
+variable :FASTLY_API_KEY, :String, default: ""
+variable :FASTLY_SERVICE_ID, :String, default: ""
+variable :FASTLY_SAFE_PARAMS_SNIPPET_NAME, :String, default: ""
 
 # Honeycomb for monitoring and observability
 # (https://www.honeycomb.io/)
@@ -118,7 +115,6 @@ variable :HONEYCOMB_API_KEY, :String, default: ""
 
 # Google analytic
 # (https://developers.google.com/analytics/devguides/reporting/core/v4)
-variable :GA_SERVICE_ACCOUNT_JSON, :String, default: "Optional"
 variable :GA_TRACKING_ID, :String, default: "Optional"
 
 # Mailchimp for mails

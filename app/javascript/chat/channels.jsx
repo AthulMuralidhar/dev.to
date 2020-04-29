@@ -11,16 +11,12 @@ const Channels = ({
   expanded,
   filterQuery,
   channelsLoaded,
-  incomingVideoCallChannelIds,
 }) => {
   const channels = chatChannels.map(channel => {
     const isActive = parseInt(activeChannelId, 10) === channel.chat_channel_id;
     const isUnopened =
       !isActive && unopenedChannelIds.includes(channel.chat_channel_id);
     let newMessagesIndicator = isUnopened ? 'new' : 'old';
-    if (incomingVideoCallChannelIds.indexOf(channel.chat_channel_id) > -1) {
-      newMessagesIndicator = 'video';
-    }
     const otherClassname = isActive
       ? 'chatchanneltab--active'
       : 'chatchanneltab--inactive';
@@ -28,7 +24,7 @@ const Channels = ({
       <button
         type="button"
         key={channel.id}
-        className="chatchanneltabbutton"
+        className="chatchanneltabbutton crayons-link"
         onClick={handleSwitchChannel}
         data-channel-id={channel.chat_channel_id}
         data-channel-slug={channel.channel_modified_slug}
@@ -53,11 +49,11 @@ const Channels = ({
               className={
                 channel.channel_type === 'direct'
                   ? 'chatchanneltabindicatordirectimage'
-                  : 'chatchanneltabindicatordirectimage invert-channel-image'
+                  : 'chatchanneltabindicatorgroupimage invert-channel-image'
               }
             />
           </span>
-          {channel.channel_name}
+          {isUnopened ? <span class="crayons-indicator crayons-indicator--accent crayons-indicator--bullet"></span> : ''}{channel.channel_name}
         </span>
       </button>
     );
@@ -122,7 +118,6 @@ Channels.propTypes = {
   expanded: PropTypes.bool.isRequired,
   filterQuery: PropTypes.string.isRequired,
   channelsLoaded: PropTypes.bool.isRequired,
-  incomingVideoCallChannelIds: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
 
 export default Channels;

@@ -1,14 +1,13 @@
 class Article < ApplicationRecord
   include CloudinaryHelper
   include ActionView::Helpers
-  include AlgoliaSearch
   include Storext.model
   include Reactable
   include Searchable
 
   SEARCH_SERIALIZER = Search::ArticleSerializer
   SEARCH_CLASS = Search::FeedContent
-  REACTION_INDEXED_FIELDS = %w[body_markdown published tag_list title].freeze
+  DATA_SYNC_CLASS = DataSync::Elasticsearch::Article
 
   acts_as_taggable_on :tags
   resourcify
@@ -29,6 +28,11 @@ class Article < ApplicationRecord
   counter_culture :organization
 
   has_many :comments, as: :commentable, inverse_of: :commentable
+  has_many :top_comments,
+           -> { where("comments.score > ? AND ancestry IS NULL and hidden_by_commentable_user is FALSE and deleted is FALSE", 10).order("comments.score DESC") },
+           as: :commentable,
+           inverse_of: :commentable,
+           class_name: "Comment"
   has_many :profile_pins, as: :pinnable, inverse_of: :pinnable
   has_many :buffer_updates, dependent: :destroy
   has_many :notifications, as: :notifiable, inverse_of: :notifiable, dependent: :delete_all
@@ -75,11 +79,9 @@ class Article < ApplicationRecord
   after_save :notify_slack_channel_about_publication
 
   after_update_commit :update_notifications, if: proc { |article| article.notifications.any? && !article.saved_changes.empty? }
-  after_update_commit :update_reading_list_reactions, if: proc { |article|
-    REACTION_INDEXED_FIELDS.any? { |field| article.saved_changes[field] } && reactions.readinglist.any?
-  }
-  after_commit :async_score_calc, :update_main_image_background_hex, :touch_collection
+  after_commit :async_score_calc, :update_main_image_background_hex, :touch_collection, on: %i[create update]
   after_commit :index_to_elasticsearch, on: %i[create update]
+  after_commit :sync_related_elasticsearch_docs, on: %i[create update]
   after_commit :remove_from_elasticsearch, on: [:destroy]
 
   before_destroy :before_destroy_actions, prepend: true
@@ -122,7 +124,8 @@ class Article < ApplicationRecord
            :video, :user_id, :organization_id, :video_source_url, :video_code,
            :video_thumbnail_url, :video_closed_caption_track_url, :language,
            :experience_level_rating, :experience_level_rating_distribution, :cached_user, :cached_organization,
-           :published_at, :crossposted_at, :boost_states, :description, :reading_time, :video_duration_in_seconds)
+           :published_at, :crossposted_at, :boost_states, :description, :reading_time, :video_duration_in_seconds,
+           :last_comment_at)
   }
 
   scope :limited_columns_internal_select, lambda {
@@ -168,69 +171,7 @@ class Article < ApplicationRecord
 
   scope :with_video, -> { published.where.not(video: [nil, ""], video_thumbnail_url: [nil, ""]).where("score > ?", -4) }
 
-  algoliasearch per_environment: true, auto_remove: false, enqueue: :trigger_index do
-    attribute :title
-    add_index "searchables", id: :index_id, per_environment: true, enqueue: :trigger_index do
-      attributes :title, :tag_list, :main_image, :id, :reading_time, :score,
-                 :featured, :published, :published_at, :featured_number,
-                 :comments_count, :reactions_count, :positive_reactions_count,
-                 :path, :class_name, :user_name, :user_username, :comments_blob,
-                 :body_text, :tag_keywords_for_search, :search_score, :readable_publish_date, :flare_tag, :approved
-      attribute :user do
-        { username: user.username, name: user.name,
-          profile_image_90: ProfileImage.new(user).get(width: 90), pro: user.pro? }
-      end
-      tags do
-        [tag_list,
-         "user_#{user_id}",
-         "username_#{user&.username}",
-         "lang_#{language || 'en'}",
-         ("organization_#{organization_id}" if organization)].flatten.compact
-      end
-      searchableAttributes ["unordered(title)",
-                            "body_text",
-                            "tag_list",
-                            "tag_keywords_for_search",
-                            "user_name",
-                            "user_username",
-                            "comments_blob"]
-      attributesForFaceting %i[class_name approved]
-      customRanking ["desc(search_score)", "desc(hotness_score)"]
-    end
-
-    add_index "ordered_articles", id: :index_id, per_environment: true, enqueue: :trigger_index do
-      attributes :title, :path, :class_name, :comments_count, :reading_time, :language,
-                 :tag_list, :positive_reactions_count, :id, :hotness_score, :score, :readable_publish_date, :flare_tag, :user_id,
-                 :organization_id, :cloudinary_video_url, :video_duration_in_minutes, :experience_level_rating, :experience_level_rating_distribution, :approved
-      attribute :published_at_int do
-        published_at.to_i
-      end
-      attribute :user do
-        { username: user.username,
-          name: user.name,
-          profile_image_90: ProfileImage.new(user).get(width: 90) }
-      end
-      attribute :organization do
-        if organization
-          { slug: organization.slug,
-            name: organization.name,
-            profile_image_90: ProfileImage.new(organization).get(width: 90) }
-        end
-      end
-      tags do
-        [tag_list, "user_#{user_id}", "username_#{user&.username}", "lang_#{language || 'en'}",
-         ("organization_#{organization_id}" if organization)].flatten.compact
-      end
-      ranking ["desc(hotness_score)"]
-      attributesForFaceting %i[class_name approved]
-      add_replica "ordered_articles_by_positive_reactions_count", inherit: true, per_environment: true do
-        ranking ["desc(positive_reactions_count)"]
-      end
-      add_replica "ordered_articles_by_published_at", inherit: true, per_environment: true do
-        ranking ["desc(published_at_int)"]
-      end
-    end
-  end
+  scope :eager_load_serialized_data, -> { includes(:user, :organization, :tags) }
 
   store_attributes :boost_states do
     boosted_additional_articles Boolean, default: false
@@ -271,29 +212,8 @@ class Article < ApplicationRecord
     end
   end
 
-  def self.trigger_index(record, remove)
-    # on destroy an article is removed from index in a before_destroy callback #before_destroy_actions
-    return if remove
-
-    if record.published && record.tag_list.exclude?("hiring")
-      Search::IndexWorker.perform_async("Article", record.id)
-    else
-      Search::RemoveFromIndexWorker.perform_async(Article.algolia_index_name, record.id)
-      Search::RemoveFromIndexWorker.perform_async("searchables_#{Rails.env}", record.index_id)
-      Search::RemoveFromIndexWorker.perform_async("ordered_articles_#{Rails.env}", record.index_id)
-    end
-  end
-
   def search_id
     "article_#{id}"
-  end
-
-  def update_reading_list_reactions
-    if published
-      reactions.readinglist.find_each(&:index_to_elasticsearch)
-    elsif saved_changes["published"]
-      reactions.readinglist.find_each(&:remove_from_elasticsearch)
-    end
   end
 
   def processed_description
@@ -308,14 +228,8 @@ class Article < ApplicationRecord
     ActionView::Base.full_sanitizer.sanitize(processed_html)[0..7000]
   end
 
-  def remove_algolia_index
-    remove_from_index!
-    delete_related_objects
-  end
-
   def touch_by_reaction
     async_score_calc
-    index!
     index_to_elasticsearch
   end
 
@@ -414,11 +328,6 @@ class Article < ApplicationRecord
     (video_duration_in_seconds.to_i / 60) % 60
   end
 
-  # keep public because it's used in algolia jobs
-  def index_id
-    "articles-#{id}"
-  end
-
   def update_score
     new_score = reactions.sum(:points) + Reaction.where(reactable_id: user_id, reactable_type: "User").sum(:points)
     update_columns(score: new_score,
@@ -428,11 +337,6 @@ class Article < ApplicationRecord
   end
 
   private
-
-  def delete_related_objects
-    Search::RemoveFromIndexWorker.new.perform("searchables_#{Rails.env}", index_id)
-    Search::RemoveFromIndexWorker.new.perform("ordered_articles_#{Rails.env}", index_id)
-  end
 
   def search_score
     calculated_score = hotness_score.to_i + ((comments_count * 3).to_i + positive_reactions_count.to_i * 300 * user.reputation_modifier * score.to_i)
@@ -515,7 +419,6 @@ class Article < ApplicationRecord
 
   def before_destroy_actions
     bust_cache
-    remove_algolia_index
     article_ids = user.article_ids.dup
     if organization
       organization.touch(:last_article_at)

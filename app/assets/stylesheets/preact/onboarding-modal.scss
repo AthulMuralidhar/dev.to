@@ -26,7 +26,7 @@
   }
 
   a {
-    color: var(--link-branded-color);
+    color: var(--link-brand-color);
   }
 }
 
@@ -36,10 +36,30 @@
   flex: 1 0 auto;
   padding: $su-4;
   width: 100%;
+  max-height: calc(100vh - 70px);
+  overflow: auto;
 
   @media screen and (min-width: $breakpoint-s) {
     justify-content: center;
     padding: $su-7 $su-8 $su-8;
+  }
+}
+
+.toggle-bottom {
+  padding-bottom: 0px;
+}
+
+// terms and conditions view
+.terms-and-conditions-wrapper {
+  $content-height: 358px;
+
+  button {
+    @extend .crayons-btn;
+  }
+  .terms-and-conditions-content {
+    height: $content-height;
+    overflow-y: scroll;
+    margin-top: 10px;
   }
 }
 
@@ -89,13 +109,72 @@
   width: 100%;
   border-bottom: 2px solid var(--box-darker);
 
+  &.intro-slide {
+    border-bottom: none;
+  }
+
   .navigation-content {
     display: flex;
     justify-content: space-between;
     padding: $su-4;
 
+    &.intro-slide {
+      padding: 0;
+    }
+
     button {
       @extend .crayons-btn;
+    }
+
+    .back-button-container,
+    .next-button {
+      // Explicitly set width to avoid next-button re-sizing with text,
+      // and to ensure that back-button-container takes up the same amount of space.
+      width: $su-10;
+    }
+
+    .back-button {
+      @extend .crayons-btn;
+      @extend .crayons-btn--ghost;
+      @extend .crayons-btn--icon;
+
+      $button-size: 40px; // Explicitly set size for accessibility.
+
+      border-radius: 100%;
+      min-width: $button-size;
+      height: $button-size;
+      align-items: center;
+      display: flex;
+
+      &:hover,
+      &:active {
+        background: var(--base-10);
+      }
+    }
+
+    .skip-for-now {
+      @extend .crayons-btn;
+      @extend .crayons-btn--secondary;
+    }
+
+    .stepper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .dot {
+      $dot-size: 10px;
+
+      background-color: var(--base-30);
+      border-radius: 50%;
+      width: $dot-size;
+      height: $dot-size;
+      margin: $su-1;
+    }
+
+    .active {
+      background-color: var(--accent-brand);
     }
   }
 }
@@ -133,12 +212,33 @@
   align-self: flex-end;
   flex-shrink: 0;
   width: 100%;
-  border-top: 2px solid var(--box-darker);
+  line-height: 100%;
+  height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 
   .selection-status-content {
     display: block;
-    padding: $su-4;
     text-align: center;
+
+    .follow-count {
+      font-size: $su-4;
+      font-weight: $fw-medium;
+      line-height: $lh-base;
+
+      &--active {
+        font-weight: $fw-bold;
+      }
+    }
+
+    button {
+      background: none;
+      border: none;
+      padding: 0px;
+      color: var(--accent-brand);
+      font-size: $fs-s;
+    }
   }
 }
 
@@ -152,11 +252,12 @@
 // modal overflow scrolling
 .onboarding-modal-scroll-container {
   height: auto;
-  min-height: 436px;
-  @media screen and (min-width: $breakpoint-s) {
-    max-height: 500px;
-    overflow-y: scroll;
-    position: relative;
+  max-height: calc(100vh - 289px);
+  overflow-y: scroll;
+  border-bottom: 1px solid var(--base-20);
+
+  @media screen and (min-height: 800px) {
+    max-height: 520px;
   }
 }
 
@@ -166,7 +267,6 @@
   grid-template-columns: repeat(2, 1fr);
   grid-gap: $su-4;
   width: 100%;
-  min-height: 316px;
 
   @media screen and (min-width: 800px) {
     grid-template-columns: repeat(3, 1fr);
@@ -239,7 +339,7 @@
       }
 
       input[type='checkbox']:checked {
-        background: var(--link-branded-color);
+        background: var(--link-brand-color);
       }
     }
   }
@@ -294,6 +394,10 @@
   .navigation-content {
     padding: $su-7;
     justify-content: center;
+
+    &.intro-slide {
+      padding: 0;
+    }
 
     button {
       @extend .crayons-btn;
@@ -360,16 +464,44 @@ $onboarding-user-selected-hover: rgba(71, 85, 235, 0.2);
     border: 1px solid var(--base-10);
   }
 
+  .current-user-info {
+    text-align: center;
+    margin-bottom: 1rem;
+
+    .current-user-avatar-container {
+      height: 80px;
+    }
+
+    .current-user-avatar {
+      border-radius: 100%;
+      height: inherit;
+      object-fit: cover;
+      border: 2px solid var(--base-90);
+    }
+
+    h3 {
+      margin-top: $su-2;
+      line-height: $lh-tight;
+    }
+
+    p {
+      font-size: $fs-base;
+      line-height: $lh-tight;
+      color: var(--base-70);
+    }
+  }
+
   .user-name,
   .user-summary {
     margin: 0;
     line-height: $lh-tight;
+    overflow-wrap: anywhere;
   }
 
   .user-name {
     font-size: $fs-base;
   }
-  
+
   .user-info {
     width: 100%;
   }
@@ -504,7 +636,7 @@ $onboarding-user-selected-hover: rgba(71, 85, 235, 0.2);
   }
 
   textarea {
-    min-height: 120px;
+    min-height: 80px;
   }
 
   label {
@@ -517,13 +649,21 @@ $onboarding-user-selected-hover: rgba(71, 85, 235, 0.2);
     }
   }
 
+  .checkbox-form-wrapper {
+    padding: $su-7;
+
+    .checkbox-form {
+      padding-bottom: $su-6;
+    }
+  }
+
   // Checkboxes
   .checkbox-item {
     label {
       @extend .crayons-field__label;
       align-items: baseline;
       border-radius: $br-default;
-      display: inline-block;
+      display: flex;
       flex-direction: row;
       padding: 0 $su-1;
       width: 100%;
@@ -549,6 +689,12 @@ $onboarding-user-selected-hover: rgba(71, 85, 235, 0.2);
         @extend .crayons-checkbox;
         margin-right: $su-2 !important;
       }
+    }
+  }
+
+  @media screen and (max-height: 790px) {
+    .onboarding-form-input--last {
+      margin-bottom: 25px;
     }
   }
 }

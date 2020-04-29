@@ -1,12 +1,29 @@
 class RateLimitChecker
   attr_reader :user, :action
 
+  RETRY_AFTER = {
+    article_update: 30,
+    image_upload: 30,
+    published_article_creation: 30
+  }.with_indifferent_access.freeze
+
   def initialize(user = nil)
     @user = user
   end
 
-  class UploadRateLimitReached < StandardError; end
-  class DailyFollowAccountLimitReached < StandardError; end
+  class LimitReached < StandardError
+    attr_reader :retry_after
+
+    def initialize(retry_after)
+      @retry_after = retry_after
+    end
+
+    def message
+      "Rate limit reached, try again in #{retry_after} seconds"
+    end
+  end
+
+  class UploadRateLimitReached < LimitReached; end
 
   def limit_by_action(action)
     check_method = "check_#{action}_limit"
@@ -21,9 +38,13 @@ class RateLimitChecker
   end
 
   def track_image_uploads
-    count = Rails.cache.read("#{@user.id}_image_upload").to_i
-    count += 1
-    Rails.cache.write("#{@user.id}_image_upload", count, expires_in: 30.seconds)
+    expires_in = RETRY_AFTER[:image_upload].seconds
+    Rails.cache.increment("#{@user.id}_image_upload", 1, expires_in: expires_in)
+  end
+
+  def track_article_updates
+    expires_in = RETRY_AFTER[:article_update].seconds
+    Rails.cache.increment("#{@user.id}_article_update", 1, expires_in: expires_in)
   end
 
   def limit_by_email_recipient_address(address)
@@ -47,6 +68,11 @@ class RateLimitChecker
   def check_image_upload_limit
     Rails.cache.read("#{user.id}_image_upload").to_i >
       SiteConfig.rate_limit_image_upload
+  end
+
+  def check_article_update_limit
+    Rails.cache.read("#{user.id}_article_update").to_i >
+      SiteConfig.rate_limit_article_update
   end
 
   def check_follow_account_limit

@@ -18,10 +18,10 @@ module ApplicationHelper
   end
 
   def title(page_title)
-    derived_title = if page_title.include?(ApplicationConfig["COMMUNITY_NAME"])
+    derived_title = if page_title.include?(community_name)
                       page_title
                     else
-                      page_title + " - #{ApplicationConfig['COMMUNITY_NAME']} Community 👩‍💻👨‍💻"
+                      "#{page_title} - #{community_qualified_name} 👩‍💻👨‍💻"
                     end
     content_for(:title) { derived_title }
     derived_title
@@ -170,6 +170,17 @@ module ApplicationHelper
     "#{start_year} - #{current_year}"
   end
 
+  def email_link(type = :default, text: nil, additional_info: nil)
+    # The allowed types for type is :default, :business, :privacy, and members.
+    # These options can be found in field :email_addresses of models/site_config.rb
+    email = SiteConfig.email_addresses[type] || SiteConfig.email_addresses[:default]
+    mail_to email, text || email, additional_info
+  end
+
+  def community_members_label
+    SiteConfig.community_member_label.pluralize
+  end
+
   # Creates an app internal URL
   #
   # @note Uses protocol and domain specified in the environment, ensure they are set.
@@ -194,11 +205,19 @@ module ApplicationHelper
     URL.reaction(reaction)
   end
 
-  def tag_url(tag, page)
+  def tag_url(tag, page = 1)
     URL.tag(tag, page)
   end
 
   def user_url(user)
     URL.user(user)
+  end
+
+  def organization_url(organization)
+    URL.organization(organization)
+  end
+
+  def sanitized_referer(referer)
+    URL.sanitized_referer(referer)
   end
 end

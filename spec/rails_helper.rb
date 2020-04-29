@@ -7,7 +7,6 @@ abort("The Rails environment is running in production mode!") if Rails.env.produ
 
 # Add additional requires below this line. Rails is not loaded until this point!
 
-require "algolia/webmock"
 require "pundit/matchers"
 require "pundit/rspec"
 require "webmock/rspec"
@@ -15,6 +14,7 @@ require "test_prof/recipes/rspec/before_all"
 require "test_prof/recipes/rspec/let_it_be"
 require "test_prof/recipes/rspec/sample"
 require "sidekiq/testing"
+# require "validate_url/rspec_matcher"
 
 # Requires supporting ruby files with custom matchers and macros, etc, in
 # spec/support/ and its subdirectories. Files matching `spec/**/*_spec.rb` are
@@ -66,9 +66,9 @@ RSpec.configure do |config|
   config.include Devise::Test::IntegrationHelpers, type: :system
   config.include Devise::Test::IntegrationHelpers, type: :request
   config.include FactoryBot::Syntax::Methods
-  config.include OmniauthMacros
+  config.include OmniauthHelpers
   config.include SidekiqTestHelpers
-  config.include ElasticsearchHelpers, elasticsearch: true
+  config.include ElasticsearchHelpers
 
   config.before(:suite) do
     Search::Cluster.recreate_indexes
@@ -113,7 +113,7 @@ RSpec.configure do |config|
     stub_request(:any, /res.cloudinary.com/).to_rack("dsdsdsds")
 
     stub_request(:post, /api.fastly.com/).
-      to_return(status: 200, body: "", headers: {})
+      to_return(status: 200, body: "".to_json, headers: {})
 
     stub_request(:post, /api.bufferapp.com/).
       to_return(status: 200, body: { fake_text: "so fake" }.to_json, headers: {})
@@ -123,6 +123,9 @@ RSpec.configure do |config|
       to_return(status: 200, body: "", headers: {})
 
     stub_request(:any, /api.mailchimp.com/).
+      to_return(status: 200, body: "", headers: {})
+
+    stub_request(:any, /dummyimage.com/).
       to_return(status: 200, body: "", headers: {})
   end
 
