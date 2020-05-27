@@ -1,5 +1,6 @@
 class StickyArticleCollection
   attr_accessor :article, :author, :reaction_count_num, :comment_count_num
+
   def initialize(article, author)
     @article = article
     @author = author
@@ -22,7 +23,7 @@ class StickyArticleCollection
   def tag_articles
     @tag_articles ||= Article.published.tagged_with(article_tags, any: true).
       includes(:user).
-      where("positive_reactions_count > ? OR comments_count > ?", reaction_count_num, comment_count_num).
+      where("public_reactions_count > ? OR comments_count > ?", reaction_count_num, comment_count_num).
       where.not(id: article.id, user_id: article.user_id).
       where("featured_number > ?", 5.days.ago.to_i).
       order(Arel.sql("RANDOM()")).

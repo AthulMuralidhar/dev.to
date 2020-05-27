@@ -24,6 +24,7 @@ class Internal::UsersController < Internal::ApplicationController
       joins(:organization).
       order("organizations.name ASC").
       includes(:organization)
+    @last_email_verification_date = @user.email_authorizations.where.not(verified_at: nil).order("created_at DESC").first&.verified_at || "Never"
   end
 
   def update
@@ -106,6 +107,15 @@ class Internal::UsersController < Internal::ApplicationController
     end
   end
 
+  def verify_email_ownership
+    if VerificationMailer.account_ownership_verification_email(params).deliver
+      flash[:success] = "Email Verification Mailer sent!"
+      redirect_back(fallback_location: internal_users_path)
+    else
+      flash[:danger] = "Email failed to send!"
+    end
+  end
+
   private
 
   def manage_credits
@@ -138,13 +148,13 @@ class Internal::UsersController < Internal::ApplicationController
   def add_org_credits
     org = Organization.find(user_params[:organization_id])
     amount = user_params[:add_org_credits].to_i
-    Credit.add_to_org(org, amount)
+    Credit.add_to(org, amount)
   end
 
   def remove_org_credits
     org = Organization.find(user_params[:organization_id])
     amount = user_params[:remove_org_credits].to_i
-    Credit.remove_from_org(org, amount)
+    Credit.remove_from(org, amount)
   end
 
   def user_params

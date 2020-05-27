@@ -90,7 +90,7 @@ RSpec.describe "Reactions", type: :request do
         result = response.parsed_body
 
         expect(result["current_user"]).to eq("id" => user.id)
-        expect(result["positive_reaction_counts"]).to eq([{ "id" => article.comments.last.id, "count" => 1 }])
+        expect(result["public_reaction_counts"]).to eq([{ "id" => article.comments.last.id, "count" => 1 }])
         expect(result["reactions"].to_json).to eq(user.reactions.where(reactable: comment).to_json)
       end
 
@@ -113,7 +113,7 @@ RSpec.describe "Reactions", type: :request do
         result = response.parsed_body
 
         expect(result["current_user"]).to eq("id" => nil)
-        expect(result["positive_reaction_counts"]).to eq([{ "id" => article.comments.last.id, "count" => 1 }])
+        expect(result["public_reaction_counts"]).to eq([{ "id" => article.comments.last.id, "count" => 1 }])
         expect(result["reactions"]).to be_empty
       end
 
@@ -146,6 +146,29 @@ RSpec.describe "Reactions", type: :request do
         reactable_type: "User",
         category: "vomit"
       }
+    end
+
+    context "when rate limiting" do
+      let(:rate_limiter) { RateLimitChecker.new(user) }
+
+      before do
+        allow(RateLimitChecker).to receive(:new).and_return(rate_limiter)
+        sign_in user
+      end
+
+      it "increments rate limit for reaction_creation" do
+        allow(rate_limiter).to receive(:track_limit_by_action)
+        post "/reactions", params: article_params
+
+        expect(rate_limiter).to have_received(:track_limit_by_action).with(:reaction_creation)
+      end
+
+      it "returns a 429 status when rate limit is reached" do
+        allow(rate_limiter).to receive(:limit_by_action).and_return(true)
+        post "/reactions", params: article_params
+
+        expect(response.status).to eq(429)
+      end
     end
 
     context "when reacting to an article" do
@@ -236,6 +259,12 @@ RSpec.describe "Reactions", type: :request do
       it "converts field test" do
         post "/reactions", params: article_params
         expect(Users::RecordFieldTestEventWorker).to have_received(:perform_async).with(user.id, :user_home_feed, "user_creates_reaction")
+      end
+    end
+
+    context "when signed out" do
+      it "returns an unauthorized error" do
+        expect { post "/reactions", params: article_params }.to raise_error(Pundit::NotAuthorizedError)
       end
     end
   end

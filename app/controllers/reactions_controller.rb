@@ -1,5 +1,6 @@
 class ReactionsController < ApplicationController
   before_action :set_cache_control_headers, only: [:index], unless: -> { current_user }
+  before_action :authorize_for_reaction, :check_limit, only: [:create]
   after_action :verify_authorized
 
   def index
@@ -9,7 +10,7 @@ class ReactionsController < ApplicationController
       id = params[:article_id]
 
       reactions = if session_current_user_id
-                    Reaction.positive.
+                    Reaction.public_category.
                       where(
                         reactable_id: id,
                         reactable_type: "Article",
@@ -23,20 +24,20 @@ class ReactionsController < ApplicationController
     else
       comments = Comment.
         where(commentable_id: params[:commentable_id], commentable_type: params[:commentable_type]).
-        select(%i[id positive_reactions_count])
+        select(%i[id public_reactions_count])
 
       reaction_counts = comments.map do |comment|
-        { id: comment.id, count: comment.positive_reactions_count }
+        { id: comment.id, count: comment.public_reactions_count }
       end
 
       reactions = if session_current_user_id
                     comment_ids = reaction_counts.map { |rc| rc[:id] }
-                    cached_user_positive_reactions(current_user).where(reactable_id: comment_ids)
+                    cached_user_public_reactions(current_user).where(reactable_id: comment_ids)
                   else
                     Reaction.none
                   end
 
-      result = { positive_reaction_counts: reaction_counts }
+      result = { public_reaction_counts: reaction_counts }
     end
 
     render json: {
@@ -48,9 +49,7 @@ class ReactionsController < ApplicationController
   end
 
   def create
-    authorize Reaction
-
-    Rails.cache.delete "count_for_reactable-#{params[:reactable_type]}-#{params[:reactable_id]}"
+    remove_count_cache_key
 
     category = params[:category] || "like"
     reaction = Reaction.where(
@@ -73,6 +72,7 @@ class ReactionsController < ApplicationController
       reaction = build_reaction(category)
 
       if reaction.save
+        rate_limiter.track_limit_by_action(:reaction_creation)
         Moderator::SinkArticles.call(reaction.reactable_id) if reaction.vomit_on_user?
 
         Notification.send_reaction_notification(reaction, reaction.target_user)
@@ -95,9 +95,9 @@ class ReactionsController < ApplicationController
     render json: { result: result, category: category }
   end
 
-  def cached_user_positive_reactions(user)
-    Rails.cache.fetch("cached_user_reactions-#{user.id}-#{user.updated_at}", expires_in: 24.hours) do
-      user.reactions.positive
+  def cached_user_public_reactions(user)
+    Rails.cache.fetch("cached_user_reactions-#{user.id}-#{user.public_reactions_count}", expires_in: 24.hours) do
+      user.reactions.public_category
     end
   end
 
@@ -115,7 +115,6 @@ class ReactionsController < ApplicationController
   end
 
   def destroy_reaction(reaction)
-    current_user.touch
     reaction.destroy
     Moderator::SinkArticles.call(reaction.reactable_id) if reaction.vomit_on_user?
     Notification.send_reaction_notification_without_delay(reaction, reaction.target_user)
@@ -129,5 +128,19 @@ class ReactionsController < ApplicationController
                       user_id: current_user.id,
                       context: "readinglist_reaction",
                       rating: current_user.experience_level)
+  end
+
+  def check_limit
+    rate_limit!(:reaction_creation)
+  end
+
+  def authorize_for_reaction
+    authorize Reaction
+  end
+
+  def remove_count_cache_key
+    return unless params[:reactable_type] == "Article"
+
+    Rails.cache.delete "count_for_reactable-Article-#{params[:reactable_id]}"
   end
 end

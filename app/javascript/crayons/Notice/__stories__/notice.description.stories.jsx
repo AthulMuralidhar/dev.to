@@ -1,9 +1,9 @@
 import { h } from 'preact';
 
-import '../../storybook-utiltiies/designSystem.scss';
+import '../../storybook-utilities/designSystem.scss';
 
 export default {
-  title: 'Components/Notices',
+  title: '3_Components/Notices',
 };
 
 export const Description = () => (

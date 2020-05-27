@@ -1,9 +1,9 @@
 module Api
   module V0
     class ArticlesController < ApiController
-      before_action :authenticate_with_api_key_or_current_user!, only: %i[create update]
-      before_action :authenticate!, only: :me
+      before_action :authenticate!, only: %i[create update me]
       before_action -> { doorkeeper_authorize! :public }, only: %w[index show], if: -> { doorkeeper_token }
+      before_action -> { doorkeeper_authorize! :write_articles }, only: %w[create update], if: -> { doorkeeper_token }
 
       before_action :validate_article_param_is_hash, only: %w[create update]
 
@@ -76,7 +76,7 @@ module Api
         id user_id organization_id collection_id
         title description main_image published_at crossposted_at social_image
         cached_tag_list slug path canonical_url comments_count
-        positive_reactions_count created_at edited_at last_comment_at published
+        public_reactions_count created_at edited_at last_comment_at published
         updated_at video_thumbnail_url
       ].freeze
       private_constant :INDEX_ATTRIBUTES_FOR_SERIALIZATION
@@ -89,7 +89,7 @@ module Api
       ME_ATTRIBUTES_FOR_SERIALIZATION = %i[
         id user_id organization_id
         title description main_image published published_at cached_tag_list
-        slug path canonical_url comments_count positive_reactions_count
+        slug path canonical_url comments_count public_reactions_count
         page_views_count crossposted_at body_markdown updated_at
       ].freeze
       private_constant :ME_ATTRIBUTES_FOR_SERIALIZATION

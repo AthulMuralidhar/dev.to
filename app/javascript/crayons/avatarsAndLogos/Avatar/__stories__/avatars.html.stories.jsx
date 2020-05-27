@@ -1,9 +1,9 @@
 import { h } from 'preact';
 
-import '../../../storybook-utiltiies/designSystem.scss';
+import '../../../storybook-utilities/designSystem.scss';
 
 export default {
-  title: 'Components/Avatars & Logos/Avatars/HTML',
+  title: '3_Components/Avatars & Logos/Avatars/HTML',
 };
 
 export const Default = () => (

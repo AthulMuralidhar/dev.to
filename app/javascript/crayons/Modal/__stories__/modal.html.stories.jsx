@@ -1,9 +1,9 @@
 import { h } from 'preact';
 
-import '../../storybook-utiltiies/designSystem.scss';
+import '../../storybook-utilities/designSystem.scss';
 
 export default {
-  title: 'Components/Modals/HTML',
+  title: '3_Components/Modals/HTML',
 };
 
 export const Default = () => (

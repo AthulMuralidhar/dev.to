@@ -1,6 +1,9 @@
 class ChatChannel < ApplicationRecord
   attr_accessor :current_user, :usernames_string
 
+  CHANNEL_TYPES = %w[open invite_only direct].freeze
+  STATUSES = %w[active inactive blocked].freeze
+
   has_many :messages, dependent: :destroy
   has_many :chat_channel_memberships, dependent: :destroy
   has_many :users, through: :chat_channel_memberships
@@ -9,13 +12,14 @@ class ChatChannel < ApplicationRecord
   has_many :pending_memberships, -> { where status: "pending" }, class_name: "ChatChannelMembership", inverse_of: :chat_channel
   has_many :rejected_memberships, -> { where status: "rejected" }, class_name: "ChatChannelMembership", inverse_of: :chat_channel
   has_many :mod_memberships, -> { where role: "mod" }, class_name: "ChatChannelMembership", inverse_of: :chat_channel
+  has_many :requested_memberships, -> { where status: "joining_request" }, class_name: "ChatChannelMembership", inverse_of: :chat_channel
   has_many :active_users, through: :active_memberships, class_name: "User", source: :user
   has_many :pending_users, through: :pending_memberships, class_name: "User", source: :user
   has_many :rejected_users, through: :rejected_memberships, class_name: "User", source: :user
   has_many :mod_users, through: :mod_memberships, class_name: "User", source: :user
 
-  validates :channel_type, presence: true, inclusion: { in: %w[open invite_only direct] }
-  validates :status, presence: true, inclusion: { in: %w[active inactive blocked] }
+  validates :channel_type, presence: true, inclusion: { in: CHANNEL_TYPES }
+  validates :status, presence: true, inclusion: { in: STATUSES }
   validates :slug, uniqueness: true, presence: true
   validates :description, length: { maximum: 200 }, allow_blank: true
 
@@ -58,7 +62,7 @@ class ChatChannel < ApplicationRecord
 
   class << self
     def create_with_users(users:, channel_type: "direct", contrived_name: "New Channel", membership_role: "member")
-      raise "Invalid direct channel" if users.size != 2 && channel_type == "direct"
+      raise "Invalid direct channel" if invalid_direct_channel?(users, channel_type)
 
       usernames = users.map(&:username).sort
       slug = channel_type == "direct" ? usernames.join("/") : contrived_name.to_s.parameterize + "-" + rand(100_000).to_s(26)
@@ -89,6 +93,10 @@ class ChatChannel < ApplicationRecord
         )
       end
       channel
+    end
+
+    def invalid_direct_channel?(users, channel_type)
+      (users.size != 2 || users.map(&:id).uniq.count < 2) && channel_type == "direct"
     end
   end
 

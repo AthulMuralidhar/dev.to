@@ -8,6 +8,10 @@ RSpec.describe "User visits a homepage", type: :system do
   context "when user hasn't logged in" do
     before { visit "/" }
 
+    it "renders the page", js: true, percy: true do
+      Percy.snapshot(page, name: "Visits homepage: logged out user")
+    end
+
     it "shows the sign-in block" do
       within ".signin-cta-widget" do
         expect(page).to have_text("Sign In With Twitter")
@@ -28,7 +32,7 @@ RSpec.describe "User visits a homepage", type: :system do
     describe "link tags" do
       it "contains the qualified community name in the search link" do
         selector = "link[rel='search'][title='#{community_qualified_name}']"
-        expect(page).to have_selector(selector, visible: false)
+        expect(page).to have_selector(selector, visible: :hidden)
       end
     end
   end
@@ -40,8 +44,13 @@ RSpec.describe "User visits a homepage", type: :system do
       sign_in(user)
     end
 
+    it "renders the page", js: true, percy: true do
+      Percy.snapshot(page, name: "Visits homepage: logged in user")
+    end
+
     it "offers to follow tags", js: true do
       visit "/"
+
       within("#sidebar-nav-default-tags") do
         expect(page).to have_text("Follow tags to improve your feed")
       end

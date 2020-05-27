@@ -1,10 +1,10 @@
 import { h } from 'preact';
 import { Button, ButtonGroup } from '@crayons';
 
-import '../../storybook-utiltiies/designSystem.scss';
+import '../../storybook-utilities/designSystem.scss';
 
 export default {
-  title: 'Components/ButtonGroup',
+  title: '3_Components/ButtonGroup',
 };
 
 export const Default = () => {

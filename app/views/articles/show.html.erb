@@ -1,7 +1,7 @@
-<% title @article.title %>
+<% title @article.title_with_query_preamble(user_signed_in?) %>
 
 <%= render "shared/webcomponents_loader_script" %>
-<%= javascript_packs_with_chunks_tag "clipboardCopy", "webShare", defer: true %>
+<%= javascript_packs_with_chunks_tag "clipboardCopy", "webShare", "articlePage", defer: true %>
 
 <% cache("content-related-optional-scripts-#{@article.id}-#{@article.updated_at}-#{internal_navigation?}-#{user_signed_in?}", expires_in: 30.hours) do %>
   <% if @article.processed_html.include? "ltag_gist-liquid-tag" %>
@@ -35,19 +35,15 @@
       <%= @article_json_ld.to_json.html_safe %>
     </script>
   <% end %>
-
-  <% if @article.processed_html.include? "runkit-element" %>
-    <%= javascript_include_tag "https://embed.runkit.com" %>
-  <% end %>
 <% end %>
 
 <% if internal_navigation? %>
-  <link rel="canonical" href="<%= @article.canonical_url.presence || "https://#{ApplicationConfig['APP_DOMAIN']}#{@article.path}" %>" />
+  <link rel="canonical" href="<%= @article.canonical_url.presence || app_url(@article.path) %>" />
   <meta name="description" content="<%= @article.description_and_tags %>">
   <meta name="keywords" content="<%= @article.cached_tag_list %>, <%= SiteConfig.meta_keywords[:article] %>">
 <% else %>
   <%= content_for :page_meta do %>
-    <link rel="canonical" href="<%= @article.canonical_url.presence || "https://#{ApplicationConfig['APP_DOMAIN']}#{@article.path}" %>" />
+    <link rel="canonical" href="<%= @article.canonical_url.presence || app_url(@article.path) %>" />
     <meta name="description" content="<%= @article.description_and_tags %>">
     <meta name="keywords" content="<%= @article.cached_tag_list %>, <%= SiteConfig.meta_keywords[:article] %>">
 
@@ -84,7 +80,6 @@
     class="container article"
     id="article-show-container"
     data-author-id="<%= @article.user_id %>"
-    data-live="<%= @article.live_now %>"
     data-path="<%= @article.path %>"
     data-published="<%= @article.published? %>">
     <% if @article.video_state == "PROGRESSING" %>
@@ -115,7 +110,10 @@
           </a>
         <% end %>
         <h1 class="<%= @article.title_length_classification %>">
-          <%= @article.title %>
+          <% if @article.search_optimized_title_preamble.present? && !user_signed_in? %>
+            <span class="article-title-preamble"><%= @article.search_optimized_title_preamble %></span>
+          <% end %>
+          <%= sanitize_and_decode @article.title %>
         </h1>
         <h3>
           <span>
@@ -207,7 +205,7 @@
   <% end %>
 </div>
 
-<% stick_nav_cache_key = "sticky-sidebar-#{@article.id}-#{(@organization || @user).profile_updated_at}-#{(@organization || @user).last_article_at}-#{@variant_number}-#{(@organization || @user).pro?}" %>
+<% stick_nav_cache_key = "sticky-sidebar-#{@article.id}-#{(@organization || @user).profile_updated_at}-#{(@organization || @user).last_article_at}-0-#{@user.pro?}" %>
 <% cache(stick_nav_cache_key, expires_in: 50.hours) do %>
   <%= render "articles/sticky_nav" %>
 <% end %>
@@ -227,9 +225,9 @@
 <% cache("article-show-scripts", expires_in: 8.hours) do %>
   <script async>
     <%# we consider these scripts safe for embedding as they come from our code %>
-    <%= PodcastTag.script.html_safe %>
-    <%= PollTag.script.html_safe %>
-    <%= RunkitTag.script.html_safe %>
-    <%= TweetTag.script.html_safe %>
+    <%== PodcastTag.script %>
+    <%== PollTag.script %>
+    <%== RunkitTag.script %>
+    <%== TweetTag.script %>
   </script>
 <% end %>

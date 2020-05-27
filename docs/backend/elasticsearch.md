@@ -17,7 +17,7 @@ At DEV we use Elasticsearch for all of our user-facing searching needs. Models
 that are searched using Elasticsearch are:
 
 - Tags
-- Classified Listings
+- Listings
 - Chat Channels
 - Users
 - Podcast Episodes
@@ -31,7 +31,7 @@ The above models are organized in Elasticsearch in different
 searching more accurate and performant. The index breakdown is:
 
 - Tags index -> Tags
-- Classified Listings index -> Classified Listings
+- Listings index -> Listings
 - Chat Channel Membership index -> Chat Channels
 - User's index -> Users
 - Feed Content index -> Podcast Episodes, Comments, and Articles
@@ -55,10 +55,10 @@ error. Mappings for each index can be found in
 
 In order to index the data from Postgres into Elasticsearch, we rely on
 callbacks in our ActiveRecord models. Whenever a model is created or updated we
-use an `after_commit` callback to enqueue a `Search::IndexToElasticsearchWorker`
-which handles indexing the document into Elasticsearch. In order to translate
-our ActiveRecord data to Elasticsearch we use serializers. Each model has its
-own serializer which can be found in `app/serializers/search`
+use an `after_commit` callback to enqueue a `Search::IndexWorker` which handles
+indexing the document into Elasticsearch. In order to translate our ActiveRecord
+data to Elasticsearch we use serializers. Each model has its own serializer
+which can be found in `app/serializers/search`
 
 ### Searching Elasticsearch
 

@@ -21,6 +21,8 @@ FactoryBot.define do
     checked_terms_and_conditions { true }
     signup_cta_variant           { "navbar_basic" }
     email_digest_periodic        { false }
+    bg_color_hex                 { Faker::Color.hex_color }
+    text_color_hex               { Faker::Color.hex_color }
 
     trait :with_identity do
       transient { identities { Authentication::Providers.available } }
@@ -124,12 +126,6 @@ FactoryBot.define do
       end
     end
 
-    trait :with_pro_membership do
-      after(:create) do |user|
-        create(:pro_membership, user: user)
-      end
-    end
-
     trait :tag_moderator do
       after(:create) do |user|
         tag = create(:tag)
@@ -143,6 +139,27 @@ FactoryBot.define do
         create(:user_optional_field, user: user, label: "another field1", value: "another value1")
         create(:user_optional_field, user: user, label: "another field2", value: "another value2")
       end
+    end
+
+    trait :with_all_info do
+      education { "DEV University" }
+      employment_title { "Software Engineer" }
+      employer_name { "DEV" }
+      employer_url { "http://dev.to" }
+      currently_learning { "Preact" }
+      mostly_work_with { "Ruby" }
+      currently_hacking_on { "JSON-LD" }
+      mastodon_url { "https://mastodon.social/@test" }
+      facebook_url { "www.facebook.com/example" }
+      linkedin_url { "www.linkedin.com/company/example/" }
+      youtube_url { "https://youtube.com/example" }
+      behance_url { "www.behance.net/#{username}" }
+      stackoverflow_url { "www.stackoverflow.com/example" }
+      dribbble_url { "www.dribbble.com/example" }
+      medium_url { "www.medium.com/example" }
+      gitlab_url { "www.gitlab.com/example" }
+      instagram_url { "www.instagram.com/example" }
+      twitch_username { "Example007" }
     end
   end
 end

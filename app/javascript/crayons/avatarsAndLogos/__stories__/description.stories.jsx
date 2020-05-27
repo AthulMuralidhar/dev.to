@@ -1,8 +1,8 @@
 import { h } from 'preact';
 
-import '../../storybook-utiltiies/designSystem.scss';
+import '../../storybook-utilities/designSystem.scss';
 
-export default { title: 'Components/Avatars & Logos' };
+export default { title: '3_Components/Avatars & Logos' };
 
 export const Description = () => (
   <div className="container">
