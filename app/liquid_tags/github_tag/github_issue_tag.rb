@@ -17,11 +17,11 @@ class GithubTag
       @content_json = @content.issue_serialized
       @is_issue = @content_json[:title].present?
       @created_at = @content_json[:created_at]
-      @body = @content.processed_html.html_safe
+      @body = @content.processed_html.html_safe # rubocop:disable Rails/OutputSafety
     end
 
     def render
-      ActionController::Base.new.render_to_string(
+      ApplicationController.render(
         partial: PARTIAL,
         locals: {
           body: @body,
@@ -73,21 +73,15 @@ class GithubTag
       uri.query = nil
 
       # remove leading forward slash in the path
-      path = uri.path.sub(%r{\A/}, "")
+      path = uri.path.delete_prefix("/")
 
       URI.parse(API_BASE_ENDPOINT).merge(path).to_s
     end
 
-    def finalize_html(input)
-      input.gsub(/(?!<code[^>]*?>)(@[a-zA-Z]{3,})(?![^<]*?<\/code>)/) do |target|
-        "<a class=\"github-user-link\" href=\"https://github.com/#{target.delete('@')}\">#{target}</a>"
-      end.html_safe
-    end
-
     def valid_link?(link)
-      link_without_domain = link.gsub(/.*github\.com\//, "").split("/")
+      link_without_domain = link.gsub(%r{.*github\.com/}, "").split("/")
       validations = [
-        /.*github\.com\//.match?(link),
+        %r{.*github\.com/}.match?(link),
         link_without_domain.length == 4,
         link_without_domain[3].to_i.positive?,
       ]

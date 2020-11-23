@@ -1,10 +1,15 @@
 require "rails_helper"
 
 RSpec.describe "Api::V0::Articles", type: :request do
-  let_it_be_readonly(:organization) { create(:organization) } # not used by every spec but lower times overall
-  let_it_be_changeable(:article) { create(:article, featured: true, tags: "discuss") }
+  let(:organization) { create(:organization) } # not used by every spec but lower times overall
+  let(:tag) { create(:tag, name: "discuss") }
+  let(:article) { create(:article, featured: true, tags: "discuss") }
+
+  before { stub_const("FlareTag::FLARE_TAG_IDS_HASH", { "discuss" => tag.id }) }
 
   describe "GET /api/articles" do
+    before { article }
+
     it "returns CORS headers" do
       origin = "http://example.com"
       get api_articles_path, headers: { "origin": origin }
@@ -45,7 +50,7 @@ RSpec.describe "Api::V0::Articles", type: :request do
     context "without params" do
       it "returns json response" do
         get api_articles_path
-        expect(response.content_type).to eq("application/json")
+        expect(response.media_type).to eq("application/json")
       end
 
       it "returns nothing if params state=all is not found" do
@@ -151,6 +156,42 @@ RSpec.describe "Api::V0::Articles", type: :request do
 
         expected_key = ["articles", article.record_key].to_set
         expect(response.headers["surrogate-key"].split.to_set).to eq(expected_key)
+      end
+    end
+
+    context "with tags param" do
+      it "returns articles with any of the specified tags" do
+        create(:article, published: true)
+        get api_articles_path(tags: "javascript, css, not-existing-tag")
+        expect(response.parsed_body.size).to eq(1)
+      end
+    end
+
+    context "with tags_exclude param" do
+      it "returns articles that do not contain any of excluded tag" do
+        create(:article, published: true)
+        get api_articles_path(tags_exclude: "node, java")
+        expect(response.parsed_body.size).to eq(2)
+
+        create(:article, published: true, tags: "node")
+        get api_articles_path(tags_exclude: "node, java")
+        expect(response.parsed_body.size).to eq(2)
+      end
+    end
+
+    context "with tags and tags_exclude params" do
+      it "returns proper scope" do
+        create(:article, published: true)
+        get api_articles_path(tags: "javascript, css", tags_exclude: "node, java")
+        expect(response.parsed_body.size).to eq(1)
+      end
+    end
+
+    context "when tags and tags_exclude contain the same tag" do
+      it "returns empty set" do
+        create(:article, published: true, tags: "java")
+        get api_articles_path(tags: "java", tags_exclude: "java")
+        expect(response.parsed_body.size).to eq(0)
       end
     end
 
@@ -342,6 +383,65 @@ RSpec.describe "Api::V0::Articles", type: :request do
     end
   end
 
+  describe "GET /api/articles/:username/:slug" do
+    it "returns CORS headers" do
+      origin = "http://example.com"
+      get slug_api_articles_path(article.username, article.slug), headers: { "origin": origin }
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq(origin)
+      expect(response.headers["Access-Control-Allow-Methods"]).to eq("HEAD, GET, OPTIONS")
+      expect(response.headers["Access-Control-Expose-Headers"]).to be_empty
+      expect(response.headers["Access-Control-Max-Age"]).to eq(2.hours.to_i.to_s)
+    end
+
+    it "returns correct tags" do
+      get slug_api_articles_path(username: article.username, slug: article.slug)
+      expect(response.parsed_body["tags"]).to eq(article.tag_list)
+      expect(response.parsed_body["tag_list"]).to eq(article.tags[0].name)
+    end
+
+    it "returns proper article" do
+      get slug_api_articles_path(username: article.username, slug: article.slug)
+      expect(response.parsed_body).to include(
+        "title" => article.title,
+        "body_markdown" => article.body_markdown,
+        "tags" => article.decorate.cached_tag_list_array,
+      )
+    end
+
+    it "returns all the relevant datetimes" do
+      article.update_columns(
+        edited_at: 1.minute.from_now, crossposted_at: 2.minutes.ago, last_comment_at: 30.seconds.ago,
+      )
+      get slug_api_articles_path(username: article.username, slug: article.slug)
+      expect(response.parsed_body).to include(
+        "created_at" => article.created_at.utc.iso8601,
+        "edited_at" => article.edited_at.utc.iso8601,
+        "crossposted_at" => article.crossposted_at.utc.iso8601,
+        "published_at" => article.published_at.utc.iso8601,
+        "last_comment_at" => article.last_comment_at.utc.iso8601,
+      )
+    end
+
+    it "fails with an unpublished article" do
+      article.update_columns(published: false)
+      get slug_api_articles_path(username: article.username, slug: article.slug)
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "fails with an unknown article path" do
+      get slug_api_articles_path(username: "chris evan", slug: article.slug)
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "sets the correct edge caching surrogate key" do
+      get slug_api_articles_path(username: article.username, slug: article.slug)
+
+      expected_key = [article.record_key].to_set
+      expect(response.headers["surrogate-key"].split.to_set).to eq(expected_key)
+    end
+  end
+
   describe "GET /api/articles/me(/:status)" do
     context "when request is unauthenticated" do
       let(:user) { create(:user) }
@@ -364,27 +464,27 @@ RSpec.describe "Api::V0::Articles", type: :request do
     end
 
     context "when request is authenticated" do
-      let_it_be(:user) { create(:user) }
-      let_it_be(:access_token) { create :doorkeeper_access_token, resource_owner: user, scopes: "public read_articles" }
+      let(:user) { create(:user) }
+      let(:access_token) { create :doorkeeper_access_token, resource_owner: user, scopes: "public read_articles" }
 
       it "works with bearer authorization" do
         headers = { "authorization" => "Bearer #{access_token.token}", "content-type" => "application/json" }
 
         get me_api_articles_path, headers: headers
-        expect(response.content_type).to eq("application/json")
+        expect(response.media_type).to eq("application/json")
         expect(response).to have_http_status(:ok)
       end
 
       it "returns proper response specification" do
         get me_api_articles_path, params: { access_token: access_token.token }
-        expect(response.content_type).to eq("application/json")
+        expect(response.media_type).to eq("application/json")
         expect(response).to have_http_status(:ok)
       end
 
-      it "returns success when requesting publiched articles with public token" do
+      it "returns success when requesting published articles with public token" do
         public_token = create(:doorkeeper_access_token, resource_owner: user, scopes: "public")
         get me_api_articles_path(status: :published), params: { access_token: public_token.token }
-        expect(response.content_type).to eq("application/json")
+        expect(response.media_type).to eq("application/json")
         expect(response).to have_http_status(:ok)
       end
 
@@ -442,8 +542,8 @@ RSpec.describe "Api::V0::Articles", type: :request do
   end
 
   describe "POST /api/articles" do
-    let_it_be(:api_secret) { create(:api_secret) }
-    let_it_be(:user) { api_secret.user }
+    let(:api_secret) { create(:api_secret) }
+    let(:user) { api_secret.user }
 
     context "when unauthorized" do
       it "fails with no api key" do
@@ -457,8 +557,8 @@ RSpec.describe "Api::V0::Articles", type: :request do
       end
 
       it "fails with a failing secure compare" do
-        allow(ActiveSupport::SecurityUtils).
-          to receive(:secure_compare).and_return(false)
+        allow(ActiveSupport::SecurityUtils)
+          .to receive(:secure_compare).and_return(false)
         post api_articles_path, headers: { "api-key" => api_secret.secret, "content-type" => "application/json" }
         expect(response).to have_http_status(:unauthorized)
       end
@@ -485,7 +585,8 @@ RSpec.describe "Api::V0::Articles", type: :request do
         access_token = create(:doorkeeper_access_token, resource_owner_id: user.id, scopes: "write_articles")
         headers = { "authorization" => "Bearer #{access_token.token}", "content-type" => "application/json" }
 
-        post api_articles_path, params: { article: { title: Faker::Book.title, body_markdown: "" } }.to_json, headers: headers
+        post api_articles_path, params: { article: { title: Faker::Book.title,
+                                                     body_markdown: "" } }.to_json, headers: headers
         expect(response).to have_http_status(:created)
       end
 
@@ -730,7 +831,7 @@ RSpec.describe "Api::V0::Articles", type: :request do
           )
           expect(response).to have_http_status(:created)
         end.to change(Article, :count).by(1)
-        expect(Article.find(response.parsed_body["id"]).description).to eq("yoooo" * 20 + "y...")
+        expect(Article.find(response.parsed_body["id"]).description).to eq("#{'yoooo' * 20}y...")
       end
 
       it "does not raise an error if article params are missing" do
@@ -768,8 +869,8 @@ RSpec.describe "Api::V0::Articles", type: :request do
       end
 
       it "fails with a failing secure compare" do
-        allow(ActiveSupport::SecurityUtils).
-          to receive(:secure_compare).and_return(false)
+        allow(ActiveSupport::SecurityUtils)
+          .to receive(:secure_compare).and_return(false)
         put path, headers: { "api-key" => api_secret.secret, "content-type" => "application/json" }
         expect(response).to have_http_status(:unauthorized)
       end

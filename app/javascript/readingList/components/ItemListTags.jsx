@@ -1,11 +1,13 @@
 // Sidebar tags for item list page
 import { h } from 'preact';
-import { PropTypes } from 'preact-compat';
+import PropTypes from 'prop-types';
 
 export const ItemListTags = ({ availableTags, selectedTags, onClick }) => {
   const tagsHTML = availableTags.map((tag) => (
     <a
-      className={`tag ${selectedTags.indexOf(tag) > -1 ? 'selected' : ''}`}
+      className={`crayons-link crayons-link--block ${
+        selectedTags.indexOf(tag) > -1 ? 'crayons-link--current' : ''
+      }`}
       href={`/t/${tag}`}
       data-no-instant
       onClick={(e) => onClick(e, tag)}
@@ -13,7 +15,7 @@ export const ItemListTags = ({ availableTags, selectedTags, onClick }) => {
       {`#${tag}`}
     </a>
   ));
-  return <div className="tags">{tagsHTML}</div>;
+  return <nav className="crayons-layout__sidebar-left" data-testid="tags">{tagsHTML}</nav>;
 };
 
 ItemListTags.propTypes = {

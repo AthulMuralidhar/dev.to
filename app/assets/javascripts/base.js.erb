@@ -4,6 +4,7 @@
 //= require initializePage
 //= require utilities/getImageForLink
 //= require honeybadger-js/dist/honeybadger.js
+//= require ahoy.js/dist/ahoy.js
 //= require serviceworker-companion
 
 var instantClick
@@ -124,11 +125,13 @@ var instantClick
     if (newUrl) {
       history.pushState(null, null, newUrl.replace("?samepage=true","").replace("&samepage=true",""))
 
-      var hashIndex = newUrl.indexOf('#')
-        , hashElem = hashIndex > -1
-                     && document.getElementById(newUrl.substr(hashIndex + 1))
-        , offset = 0,
-        samePage = newUrl.indexOf("samepage=true") > -1
+      var hashIndex = newUrl.indexOf('#'),
+          hashElem = hashIndex > -1 && (
+            document.getElementById(newUrl.substr(hashIndex + 1)) ||
+            document.querySelector(`[name=${newUrl.substr(hashIndex + 1)}].anchor`)
+          ),
+          offset = 0,
+          samePage = newUrl.indexOf("samepage=true") > -1;
 
       if (hashElem) {
         while (hashElem.offsetParent) {
@@ -242,6 +245,26 @@ var instantClick
     getImageForLink(a);
   }
 
+  // If a link is focused, it is preloaded just like on mousover.
+  // It also covers the issue where a user needs to press <return>
+  // twice in order to follow a focused link.
+  function focusListener(e) {
+    var a = getLinkTarget(e.target)
+
+    if (!a || !isPreloadable(a)) {
+      return
+    }
+
+    if (!$delayBeforePreload) {
+      preload(a.href)
+    }
+    else {
+      $urlToPreload = a.href
+      $preloadTimer = setTimeout(preload, $delayBeforePreload)
+    }
+    getImageForLink(a);
+  }
+
   function clickListener(e) {
     try{
       var a = getLinkTarget(e.target)
@@ -255,12 +278,6 @@ var instantClick
       }
       display(a.href);
       e.preventDefault();
-      if (window.ga && ga.create) {
-        if (a.hasAttribute("data-featured-article")){
-          var data = a.dataset.featuredArticle;
-          ga('send', 'event', 'click', 'featured-feed-click', data, null);
-        }
-      }
     }
     catch(err){
       console.log(err);
@@ -371,38 +388,50 @@ var instantClick
     var docBody = document.body;
     if (docBody) {
       document.body.addEventListener('touchstart', touchstartListener, true)
+      document.body.addEventListener('focus', focusListener, true)
       if ($preloadOnMousedown) {
         document.body.addEventListener('mousedown', mousedownListener, true)
-      }
-      else {
+      } else {
         document.body.addEventListener('mouseover', mouseoverListener, true)
       }
       document.body.addEventListener('click', clickListener, true)
     }
 
     if (!isInitializing) {
-      var scripts = document.body.getElementsByTagName('script')
-        , script
-        , copy
+      var scriptElementsInDOM = document.body.getElementsByTagName('script')
+        , scriptElementsToCopy = []
+        , originalElement
+        , copyElement
         , parentNode
         , nextSibling
+        , i
 
-      for (var i = 0, j = scripts.length; i < j; i++) {
-        script = scripts[i]
-        if (script.hasAttribute('data-no-instant')) {
+      // `scriptElementsInDOM` will change during the copy of scripts if
+      // a script add or delete script elements, so we need to put script
+      // elements in an array to loop through them correctly.
+      for (i = 0; i < scriptElementsInDOM.length; i++) {
+        scriptElementsToCopy.push(scriptElementsInDOM[i])
+      }
+
+      for (i = 0; i < scriptElementsToCopy.length; i++) {
+        originalElement = scriptElementsToCopy[i]
+        if (!originalElement) { // Might have disappeared, see previous comment
           continue
         }
-        copy = document.createElement('script')
-        if (script.src) {
-          copy.src = script.src
+        if (originalElement.hasAttribute('data-no-instant')) {
+          continue
         }
-        if (script.innerHTML) {
-          copy.innerHTML = script.innerHTML
+
+        copyElement = document.createElement('script')
+        for (var j = 0; j < originalElement.attributes.length; j++) {
+          copyElement.setAttribute(originalElement.attributes[j].name, originalElement.attributes[j].value)
         }
-        parentNode = script.parentNode
-        nextSibling = script.nextSibling
-        parentNode.removeChild(script)
-        parentNode.insertBefore(copy, nextSibling)
+        copyElement.textContent = originalElement.textContent
+
+        parentNode = originalElement.parentNode
+        nextSibling = originalElement.nextSibling
+        parentNode.removeChild(originalElement)
+        parentNode.insertBefore(copyElement, nextSibling)
       }
     }
   }
@@ -678,9 +707,18 @@ var instantClick
 // INITIALIZE/ERROR HANDLING
 
   Honeybadger.configure({
-    apiKey: "<%= ApplicationConfig['HONEYBADGER_JS_API_KEY'] %>",
+    apiKey: document.body.dataset.honeybadgerKey,
     environment: "<%= Rails.env %>",
-    revision: "<%= ApplicationConfig['HEROKU_SLUG_COMMIT'] %>"
+    revision: document.body.dataset.releaseFootprint,
+    ignorePatterns: [/ResizeObserver/i, /MetaMask/i],
+  });
+
+// INITIALIZE AHOY TRACKING
+// Setting cookies to false matches what we do in ahoy's initializer.
+// Setting trackVisits to false prevents ahoy from creating a visit on the server-side.
+  ahoy.configure({
+    cookies: false,
+    trackVisits: false
   });
 
 // Start BaseApp for Page

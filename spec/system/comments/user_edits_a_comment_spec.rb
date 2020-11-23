@@ -16,23 +16,20 @@ RSpec.describe "Editing A Comment", type: :system, js: true do
   end
 
   def assert_updated
-    expect(page).to have_css("textarea[autofocus='autofocus']")
+    expect(page).to have_css("textarea")
+    expect(page).to have_text("Editing comment")
     fill_in "text-area", with: new_comment_text
-    click_button("SUBMIT")
+    click_button("Submit")
     expect(page).to have_text(new_comment_text)
   end
 
   context "when user edits comment on the bottom of the article" do
-    it "renders the page", percy: true do
-      visit article.path.to_s
-      Percy.snapshot(page, name: "Edit comment: renders")
-    end
-
     it "updates" do
       visit article.path.to_s
       wait_for_javascript
 
-      click_link("EDIT")
+      click_on(class: 'comment__dropdown-trigger')
+      click_link("Edit")
       assert_updated
     end
   end
@@ -45,7 +42,8 @@ RSpec.describe "Editing A Comment", type: :system, js: true do
 
       wait_for_javascript
 
-      click_link("EDIT")
+      click_on(class: 'comment__dropdown-trigger')
+      click_link("Edit")
       assert_updated
     end
   end
@@ -54,7 +52,7 @@ RSpec.describe "Editing A Comment", type: :system, js: true do
     it "cancels to the article page" do
       user.reload
       visit "#{comment.path}/edit"
-      expect(page).to have_link("CANCEL", href: article.path.to_s)
+      expect(page).to have_link("Dismiss")
     end
   end
 end

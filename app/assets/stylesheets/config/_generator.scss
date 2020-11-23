@@ -170,7 +170,8 @@
       'center': center,
       'end': flex-end,
       'between': space-between,
-      'around': space-around
+      'around': space-around,
+      'stretch': stretch
     ),
     (),
     true
@@ -408,22 +409,7 @@
     (),
     true
   ),
-  (
-    'z',
-    'z-index',
-    (
-      'negative': -1,
-      '0': 0,
-      '10': 10,
-      '20': 20,
-      '30': 30,
-      '40': 40,
-      '50': 50,
-      'auto': auto
-    ),
-    (),
-    false
-  ),
+  ('z', 'z-index', $z-indexes, (), false),
   (
     'overflow',
     'overflow',
@@ -572,9 +558,9 @@
     'ff',
     'font-family',
     (
-      'default': var(--ff-default),
-      'accent': var(--ff-accent),
-      'serif': var(--ff-serif)
+      'sans-serif': var(--ff-sans-serif),
+      'serif': var(--ff-serif),
+      'monospace': var(--ff-monospace)
     ),
     (),
     false
@@ -613,7 +599,7 @@
       'heavy': var(--fw-heavy)
     ),
     (),
-    false
+    true
   ),
   (
     'list',
@@ -625,10 +611,11 @@
   (
     'text',
     'text-decoration',
-    ('underline': underline, 'none': none),
+    ('underline': underline, 'none': none, 'strike': line-through),
     (),
     false
   ),
+  ('fs', 'font-style', ('italic': italic, 'normal': normal), (), false),
   (
     'text',
     'text-transform',
@@ -729,5 +716,17 @@
     true,
     null
   ),
-  (null, 'all', ('reset': unset), (), false, null)
+  (null, 'all', ('reset': unset), (), false, null),
+  (
+    'break',
+    'word-break',
+    (
+      'normal': normal,
+      'all': break-all,
+      'word': break-word,
+      'initial': initial
+    ),
+    (),
+    true
+  )
 );

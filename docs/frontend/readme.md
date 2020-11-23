@@ -10,6 +10,8 @@ items:
   - linting-formatting.md
   - liquid-tags.md
   - debugging.md
----
+  - tracking.md
+  - accessibility.md
+  - tips.md
 
 # Frontend Guide

@@ -1,9 +1,18 @@
 import { h } from 'preact';
-import { deep } from 'preact-render-spy';
+import { render } from '@testing-library/preact';
+import { axe } from 'jest-axe';
 import Modal from '../components/Modal';
 
+import '../../../assets/javascripts/utilities/localDateTime';
+
+/* eslint-disable no-unused-vars */
+/* global globalThis timestampToLocalDateTimeLong timestampToLocalDateTimeShort */
 describe('<Modal />', () => {
-  const idFromMessageModal = 'listings-message-form';
+  afterAll(() => {
+    delete globalThis.timestampToLocalDateTimeLong;
+    delete globalThis.timestampToLocalDateTimeShort;
+  });
+
   const getDefaultListing = () => ({
     id: 22,
     category: 'misc',
@@ -12,6 +21,8 @@ describe('<Modal />', () => {
       '\u003cp\u003eEius et ullam. Dolores et qui. Quis \u003cstrong\u003equi\u003c/strong\u003e omnis.\u003c/p\u003e\n',
     slug: 'illo-iure-quos-perspiciatis-5hk7',
     title: 'Illo iure quos perspiciatis.',
+    bumped_at: '2020-09-06T14:15:02.977Z',
+    originally_published_at: '2020-09-06T14:15:02.977Z',
     user_id: 7,
     tags: ['go', 'git'],
     author: {
@@ -27,8 +38,8 @@ describe('<Modal />', () => {
     onAddTag: () => {
       return 'onAddTag';
     },
-    onChange: () => {
-      return 'onChange';
+    onChangeDraftingMessage: () => {
+      return 'onChangeDraftingMessage';
     },
     onClick: () => {
       return 'OnClick';
@@ -46,23 +57,30 @@ describe('<Modal />', () => {
   });
 
   const renderModal = (listing) =>
-    deep(<Modal {...getProps()} listing={listing} />);
+    render(<Modal {...getProps()} listing={listing} />);
 
-  it('Should render the MessageModal component when the listing.contact_via_connect is true', () => {
+  it('should have no a11y violations', async () => {
+    const { container } = renderModal({ ...getDefaultListing() });
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('should render the MessageModal component when the listing.contact_via_connect is true', () => {
     const listingWithContactViaConnectTrue = {
       ...getDefaultListing(),
       contact_via_connect: true,
     };
-    const context = renderModal(listingWithContactViaConnectTrue);
-    expect(context.find(`#${idFromMessageModal}`).exists()).toBe(true);
+    const { queryByTestId } = renderModal(listingWithContactViaConnectTrue);
+
+    expect(queryByTestId('listings-message-modal')).toBeDefined();
   });
 
-  it('Should not render the MessageModal when the listing.contact_via_connect is false', () => {
+  it('should not render the MessageModal when the listing.contact_via_connect is false', () => {
     const listingWithContactViaConnectFalse = {
       ...getDefaultListing(),
       contact_via_connect: false,
     };
-    const context = renderModal(listingWithContactViaConnectFalse);
-    expect(context.find(`#${idFromMessageModal}`).exists()).toBe(false);
+    const { queryByTestId } = renderModal(listingWithContactViaConnectFalse);
+    expect(queryByTestId('listings-message-modal')).toBeNull();
   });
 });

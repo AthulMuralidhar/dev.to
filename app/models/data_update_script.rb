@@ -3,27 +3,16 @@ class DataUpdateScript < ApplicationRecord
   NAMESPACE = "DataUpdateScripts".freeze
   STATUSES = { enqueued: 0, working: 1, succeeded: 2, failed: 3 }.freeze
 
-  default_scope { order(file_name: :asc) }
-
   enum status: STATUSES
-  validates :file_name, uniqueness: true
+
+  validates :file_name, presence: true, uniqueness: true
+  validates :status, presence: true
 
   class << self
-    def filenames
-      Dir.glob("*.rb", base: DIRECTORY).map do |f|
-        Pathname.new(f).basename(".rb").to_s
-      end
-    end
-
-    def load_script_ids
-      filenames.
-        map { |file_name| find_or_create_by(file_name: file_name) }.
-        select(&:enqueued?).
-        map(&:id)
-    end
-
     def scripts_to_run
-      DataUpdateScript.where(id: load_script_ids).select(&:enqueued?)
+      insert_new_scripts
+
+      enqueued.order(file_name: :asc)
     end
 
     # true if there are more files on disk or any scripts to run, false otherwise
@@ -34,6 +23,23 @@ class DataUpdateScript < ApplicationRecord
       return true if db_scripts.values.any? { |s| s.to_sym == :enqueued }
 
       false
+    end
+
+    private
+
+    def filenames
+      Dir.glob("*.rb", base: DIRECTORY).map do |f|
+        File.basename(f, ".rb")
+      end
+    end
+
+    def insert_new_scripts
+      now = Time.current
+      scripts_params = filenames.map do |fn|
+        { file_name: fn, created_at: now, updated_at: now }
+      end
+
+      DataUpdateScript.insert_all(scripts_params)
     end
   end
 

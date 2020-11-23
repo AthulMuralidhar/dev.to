@@ -16,13 +16,17 @@
 
   var params = getQueryParams(document.location.search);
 
-  function searchMain() {
+  function searchMain(substories) {
     var query = filterXSS(params.q);
     var filters = filterXSS(params.filters || "");
-    document.getElementById("substories").innerHTML = '<div class="query-results-nothing"><div class="query-results-loader"></div><br/></div>'
+    var sortBy = filterXSS(params.sort_by || "");
+    var sortDirection = filterXSS(params.sort_direction || "");
+
+    substories.innerHTML = '<div class="p-9 align-center crayons-card"><br></div>';
     if (document.getElementById("query-wrapper")) {
-      search(query, filters);
+      search(query, filters, sortBy, sortDirection);
       initializeFilters(query, filters);
+      initializeSortingTabs(query);
     }
   }
 
@@ -30,39 +34,93 @@
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function initializeSortingTabs(query) {
+    var sortingTabs = document.getElementById("sorting-option-tabs").children;
+
+    for (var i=0; i < sortingTabs.length; i++) {
+      var tab = sortingTabs[i];
+
+      tab.addEventListener("click", function(e) {
+        var currentParams = getQueryParams(document.location.search);
+        var filters = filterXSS(currentParams.filters);
+
+        var { sortBy, sortDirection } = e.target.dataset;
+        var sortString = buildSortString(sortBy, sortDirection);
+
+        if (filters) {
+          window.history.pushState(null, null, "/search?q=" + query + "&filters=" + filters + sortString);
+          search(query, filters, sortBy, sortDirection);
+        } else {
+          window.history.pushState(null, null, "/search?q=" + query + sortString);
+          search(query, "", sortBy, sortDirection);
+        }
+
+        for (var j=0; j < sortingTabs.length; j++) {
+          if (sortingTabs[j] !== e.target) {
+            sortingTabs[j].classList.remove("crayons-tabs__item--current");
+          }
+        }
+
+        e.target.classList.add("crayons-tabs__item--current");
+      });
+    }
+  }
+
   function initializeFilters(query, filters) {
     var filterButts = document.getElementsByClassName("query-filter-button");
     for (var i = 0; i < filterButts.length; i++) {
-      if (filters == filterButts[i].dataset.filter) {
-        filterButts[i].classList.add("selected");
+      if (filters === filterButts[i].dataset.filter) {
+        filterButts[i].classList.add("crayons-link--current");
       }
       filterButts[i].onclick = function (e) {
+        var currentParams = getQueryParams(document.location.search);
+        var sortBy = filterXSS(currentParams.sort_by);
+        var sortDirection = filterXSS(currentParams.sort_direction);
+        var sortString = buildSortString(sortBy, sortDirection);
+
         if (e.target.classList.contains("my-posts-query-button") && !checkUserLoggedIn()) {
           showModal("search-my-posts");
           return;
         }
         var filters = e.target.dataset.filter;
-        window.history.replaceState(null, null, "/search?q=" + query + "&filters=" + filters);
+        window.history.pushState(null, null, "/search?q=" + query + "&filters=" + filters + sortString);
         var className = e.target.className;
         for (var i = 0; i < filterButts.length; i++) {
-          filterButts[i].classList.remove("selected");
+          filterButts[i].classList.remove("crayons-link--current");
         }
-        if (className.indexOf("selected") == -1) {
-          e.target.classList.add("selected");
-          window.history.replaceState(null, null, "/search?q=" + query + "&filters=" + filters);
-          search(query, filters);
+        if (className.indexOf("crayons-link--current") === -1) {
+          e.target.classList.add("crayons-link--current");
+          window.history.replaceState(null, null, "/search?q=" + query + "&filters=" + filters + sortString);
+          search(query, filters, sortBy, sortDirection);
         } else {
-          window.history.replaceState(null, null, "/search?q=" + query);
-          search(query, "");
+          window.history.replaceState(null, null, "/search?q=" + query + sortString);
+          search(query, "", sortBy, sortDirection);
         }
       }
     }
   }
 
-  function search(query, filters) {
+  function addOptionalBanner(query, displayBanner, jobsUrl) {
+    var lowerCaseQuery = query.toLowerCase();
+
+    if (displayBanner && lowerCaseQuery.includes("job")) {
+      document.getElementById("banner-section").innerHTML = '<div class="crayons-notice crayons-notice--info mb-3 fs-base">Interested in joining our team? Explore our <a href=' + jobsUrl + '>open roles</a>.</div>';
+    }
+  }
+
+  function buildSortString(sortBy, sortDirection) {
+    return sortBy && sortDirection ? "&sort_by=" + sortBy + "&sort_direction=" + sortDirection : "";
+  }
+
+  function search(query, filters, sortBy, sortDirection) {
     var hashtags = query.match(/#\w+/g);
     var searchTerm = query.replace(/#/g, '').trim();
     var searchHash = { per_page: 60, page: 0 };
+
+    if (sortBy && sortDirection) {
+      searchHash.sort_by = sortBy;
+      searchHash.sort_direction = sortDirection;
+    }
 
     if (filters === "MY_POSTS" && userData()) {
       searchHash.user_id = userData()['id'];
@@ -109,6 +167,10 @@
     })
       .then(response => response.json())
     .then((content) => {
+        if (searchHash["search_fields"] && content.jobs_url) {
+          addOptionalBanner(searchHash["search_fields"], content.display_jobs_banner, content.jobs_url);
+        }
+
         var resultDivs = []
         content.result.forEach(function (story, i) {
           resultDivs.push(buildArticleHTML(story));
@@ -118,17 +180,18 @@
         initializeAllFollowButts();
         initializeUserFollowButts();
         document.getElementById("substories").classList.add("search-results-loaded");
-        if (content.result.length == 0) {
-          document.getElementById("substories").innerHTML = '<div class="query-results-nothing">No results match that query</div>'
+        if (content.result.length === 0) {
+          document.getElementById("substories").innerHTML = '<div class="p-9 align-center crayons-card">No results match that query</div>'
         }
       });
   }
 
   var waitingOnSearch = setInterval(function () {
-    if (typeof search == 'function' && typeof filterXSS == 'function' && typeof buildArticleHTML == 'function') {
+    if (typeof search === 'function' && typeof filterXSS === 'function' && typeof buildArticleHTML === 'function') {
       clearInterval(waitingOnSearch);
-      if (document.querySelectorAll('.search-results-loaded').length == 0) {
-        searchMain();
+      const substories = document.getElementById("substories");
+      if (substories && document.getElementsByClassName('search-results-loaded').length === 0) {
+        searchMain(substories);
       }
     }
   }, 1);

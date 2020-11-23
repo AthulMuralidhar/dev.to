@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe "Videos", type: :request do
   let(:unauthorized_user) { create(:user) }
-  let(:authorized_user)   { create(:user, :video_permission) }
+  let(:authorized_user)   { create(:user, created_at: 1.month.ago) }
 
   describe "GET /videos" do
     it "shows video page" do
@@ -59,7 +59,7 @@ RSpec.describe "Videos", type: :request do
       end
 
       it "redirects to the article's edit page for the logged in user" do
-        stub_request(:get, /dw71fyauz7yz9\.cloudfront\.net\//).to_return(status: 200, body: "", headers: {})
+        stub_request(:get, %r{dw71fyauz7yz9\.cloudfront\.net/}).to_return(status: 200, body: "", headers: {})
         post "/videos", params: { article: { video: "https://www.something.com/something.mp4" } }
         expect(response.status).to eq(302)
       end

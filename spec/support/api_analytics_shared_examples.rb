@@ -38,13 +38,14 @@ RSpec.shared_examples "GET /api/analytics/:endpoint authorization examples" do |
     before { get "/api/analytics/#{endpoint}?#{params}", headers: { "api-key" => pro_api_token.secret } }
 
     it "renders JSON as the content type" do
-      expect(response.content_type).to eq "application/json"
+      expect(response.media_type).to eq "application/json"
     end
   end
 
   context "when attempting to view organization analytics without belonging to the organization" do
     before do
-      get "/api/analytics/#{endpoint}?organization_id=#{org.id}#{params}", headers: { "api-key" => pro_api_token.secret }
+      headers = { "api-key" => pro_api_token.secret }
+      get "/api/analytics/#{endpoint}?organization_id=#{org.id}#{params}", headers: headers
     end
 
     it "renders an error message: 'unauthorized' in JSON" do
@@ -63,14 +64,15 @@ RSpec.shared_examples "GET /api/analytics/:endpoint authorization examples" do |
     end
 
     it "renders JSON as the content type" do
-      expect(response.content_type).to eq "application/json"
+      expect(response.media_type).to eq "application/json"
     end
   end
 
   context "when attempting to view another organization analytics and not belonging to that organization" do
     it "responds with status 401 unauthorized" do
       org = create(:organization)
-      get "/api/analytics/#{endpoint}?organization_id=#{org.id}#{params}", headers: { "api-key" => org_member_token.secret }
+      headers = { "api-key" => org_member_token.secret }
+      get "/api/analytics/#{endpoint}?organization_id=#{org.id}#{params}", headers: headers
       expect(response).to have_http_status(:unauthorized)
     end
   end

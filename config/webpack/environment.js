@@ -1,6 +1,8 @@
-/* global require module */
+/* eslint-env node */
+
 const path = require('path');
 const { environment } = require('@rails/webpacker');
+const HoneybadgerSourceMapPlugin = require('@honeybadger-io/webpack');
 const erb = require('./loaders/erb');
 
 /*
@@ -18,11 +20,8 @@ environment.splitChunks((config) => {
       ...config.resolve,
       alias: {
         ...(config.resolve ? config.resolve.alias : {}),
-        '@crayons': path.resolve(
-          __dirname,
-          '../../app/javascript/crayons',
-        ) /* global __dirname */,
-        '@utilities': path.resolve(__dirname, '../../app/javascript/utlities'),
+        '@crayons': path.resolve(__dirname, '../../app/javascript/crayons'),
+        '@utilities': path.resolve(__dirname, '../../app/javascript/utilities'),
       },
     },
     optimization: {
@@ -51,5 +50,21 @@ environment.splitChunks((config) => {
 environment.loaders.delete('nodeModules');
 
 environment.loaders.append('erb', erb);
+
+if (process.env.HONEYBADGER_API_KEY && process.env.ASSETS_URL) {
+  environment.plugins.append(
+    'HoneybadgerSourceMap',
+    new HoneybadgerSourceMapPlugin({
+      apiKey: process.env.HONEYBADGER_API_KEY,
+      assetsUrl: process.env.ASSETS_URL,
+      silent: false,
+      ignoreErrors: false,
+      revision:
+        process.env.RELEASE_FOOTPRINT ||
+        process.env.HEROKU_SLUG_COMMIT ||
+        'master',
+    }),
+  );
+}
 
 module.exports = environment;

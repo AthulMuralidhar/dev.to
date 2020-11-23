@@ -6,7 +6,8 @@
 // where if I transform it in a button, `e.preventDefault()` in the parent
 // handler or `e.stopPropagation` are just ignored
 import { h } from 'preact';
-import { PropTypes } from 'preact-compat';
+import PropTypes from 'prop-types';
+import { Button } from '@crayons';
 
 export const ItemListItemArchiveButton = ({ text, onClick }) => {
   const onKeyUp = (e) => {
@@ -16,17 +17,16 @@ export const ItemListItemArchiveButton = ({ text, onClick }) => {
   };
 
   return (
-    // eslint-disable-next-line jsx-a11y/anchor-is-valid
-    <a
-      className="archive-button"
+    <Button
       onClick={onClick}
       onKeyUp={onKeyUp}
-      tabIndex="0"
-      aria-label="archive item"
+      aria-label="Archive item"
       role="button"
+      variant="ghost"
+      size="s"
     >
       {text}
-    </a>
+    </Button>
   );
 };
 

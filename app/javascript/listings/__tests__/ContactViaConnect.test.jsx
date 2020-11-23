@@ -1,31 +1,38 @@
 import { h } from 'preact';
-import { deep } from 'preact-render-spy';
+import { render, fireEvent } from '@testing-library/preact';
+import { axe } from 'jest-axe';
 import ContactViaConnect from '../components/ContactViaConnect';
 
 describe('<ContactViaConnect />', () => {
-  const getProps = () => ({
-    onChange: () => {
-      return 'onChange';
-    },
-    checked: true,
-  });
-
-  const renderContactViaConnect = (props = getProps()) =>
-    deep(<ContactViaConnect {...props} />);
-
-  it('Should render a label with a message about chat via app', () => {
-    const context = renderContactViaConnect();
-    const label = context.find('#label-contact-via-connect');
-
-    expect(label.text()).toBe(
-      'Allow Users to Message Me Via In-App Chat (DEV Connect)',
+  it('should have no a11y violations', async () => {
+    const onChange = jest.fn;
+    const { container } = render(
+      <ContactViaConnect onChange={onChange} checked />,
     );
+    const results = await axe(container);
+
+    expect(results).toHaveNoViolations();
   });
 
-  it('should render a checkbox', () => {
-    const context = renderContactViaConnect();
-    const input = context.find('#contact_via_connect');
+  it('should render a checked check box opting in to open DMs', () => {
+    const onChange = jest.fn();
+    const { getByText } = render(
+      <ContactViaConnect onChange={onChange} checked />,
+    );
 
-    expect(input.attr('checked')).toBe(getProps().checked);
+    expect(getByText('Allow Users to message me via Connect.')).toBeDefined();
+  });
+
+  it('should fire a change event when clicking the checkbox', () => {
+    const onChange = jest.fn();
+    const { getByText } = render(
+      <ContactViaConnect onChange={onChange} checked />,
+    );
+
+    const checkbox = getByText('Allow Users to message me via Connect.');
+
+    fireEvent.click(checkbox);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

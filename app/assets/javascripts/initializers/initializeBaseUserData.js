@@ -13,28 +13,15 @@ function initializeUserProfileContent(user) {
   document.getElementById('sidebar-profile').href = '/' + user.username;
 }
 
+function initializeProfileImage(user) {
+  if (!document.getElementById('comment-primary-user-profile--avatar')) return;
+  document.getElementById('comment-primary-user-profile--avatar').src =
+    user.profile_image_90;
+}
+
 function initializeUserSidebar(user) {
   if (!document.getElementById('sidebar-nav')) return;
   initializeUserProfileContent(user);
-
-  let followedTags = JSON.parse(user.followed_tags);
-  const tagSeparatorLabel =
-    followedTags.length === 0
-      ? 'Follow tags to improve your feed'
-      : 'Other Popular Tags';
-
-  followedTags.forEach((tag) => {
-    const element = document.getElementById(
-      'default-sidebar-element-' + tag.name,
-    );
-
-    if (element) {
-      element.remove();
-    }
-  });
-
-  document.getElementById('tag-separator').innerHTML = tagSeparatorLabel;
-  document.getElementById('sidebar-nav-default-tags').classList.add('showing');
 }
 
 function addRelevantButtonsToArticle(user) {
@@ -42,24 +29,23 @@ function addRelevantButtonsToArticle(user) {
   if (articleContainer) {
     if (parseInt(articleContainer.dataset.authorId, 10) === user.id) {
       let actions = [
-        `<a href="${articleContainer.dataset.path}/edit" rel="nofollow">EDIT</a>`,
+        `<a class="crayons-btn crayons-btn--s crayons-btn--secondary" href="${articleContainer.dataset.path}/edit" rel="nofollow">Edit</a>`,
       ];
+      let clickToEditButton = document.getElementById('author-click-to-edit');
+      if (clickToEditButton) {
+        clickToEditButton.style.display = 'inline-block';
+      }
       if (JSON.parse(articleContainer.dataset.published) === true) {
         actions.push(
-          `<a href="${articleContainer.dataset.path}/manage" rel="nofollow">MANAGE</a>`,
+          `<a class="crayons-btn crayons-btn--s crayons-btn--secondary ml-1" href="${articleContainer.dataset.path}/manage" rel="nofollow">Manage</a>`,
         );
       }
       if (user.pro) {
         actions.push(
-          `<a href="${articleContainer.dataset.path}/stats" rel="nofollow">STATS</a>`,
+          `<a class="crayons-btn crayons-btn--s crayons-btn--secondary ml-1" href="${articleContainer.dataset.path}/stats" rel="nofollow">Stats</a>`,
         );
       }
       document.getElementById('action-space').innerHTML = actions.join('');
-    } else if (user.trusted) {
-      document.getElementById('action-space').innerHTML =
-        '<a href="' +
-        articleContainer.dataset.path +
-        '/mod" rel="nofollow">MODERATE <span class="post-word">POST</span></a>';
     }
   }
 }
@@ -72,17 +58,21 @@ function addRelevantButtonsToComments(user) {
     for (let i = 0; i < settingsButts.length; i += 1) {
       let butt = settingsButts[i];
       const { action, commentableUserId, userId } = butt.dataset;
-
-      if (parseInt(userId, 10) === user.id) {
-        butt.style.display = 'inline-block';
+      if (parseInt(userId, 10) === user.id && action === 'settings-button') {
+        butt.innerHTML =
+          '<a href="' +
+          butt.dataset.path +
+          '" rel="nofollow" class="crayons-link crayons-link--block" data-no-instant>Settings</a>';
+        butt.classList.remove('hidden');
+        butt.classList.add('block');
       }
 
       if (
         action === 'hide-button' &&
         parseInt(commentableUserId, 10) === user.id
       ) {
-        butt.style.display = 'inline-block';
         butt.classList.remove('hidden');
+        butt.classList.add('block');
       }
     }
 
@@ -90,22 +80,40 @@ function addRelevantButtonsToComments(user) {
       var modButts = document.getElementsByClassName('mod-actions');
       for (let i = 0; i < modButts.length; i += 1) {
         let butt = modButts[i];
+        if (butt.classList.contains('mod-actions-comment-button')) {
+          butt.innerHTML =
+            '<a href="' +
+            butt.dataset.path +
+            '" rel="nofollow" class="crayons-link crayons-link--block">Moderate</a>';
+        }
         butt.className = 'mod-actions';
-        butt.style.display = 'inline-block';
+        butt.classList.remove('hidden');
+        butt.classList.add('block');
       }
     }
   }
 }
 
-function initializeBaseUserData() {
-  const user = userData();
+function setCurrentUserToNavBar(user) {
   const userNavLink = document.getElementById('first-nav-link');
   userNavLink.href = `/${user.username}`;
-  userNavLink.querySelector('span').textContent = user.name;
-  userNavLink.querySelector('small').textContent = `@${user.username}`;
+  userNavLink.getElementsByTagName('span')[0].textContent = user.name;
+  userNavLink.getElementsByTagName(
+    'small',
+  )[0].textContent = `@${user.username}`;
   document.getElementById('nav-profile-image').src = user.profile_image_90;
+  if (user.admin) {
+    document
+      .getElementsByClassName('js-header-menu-admin-link')[0]
+      .classList.remove('hidden');
+  }
+}
 
+function initializeBaseUserData() {
+  const user = userData();
+  setCurrentUserToNavBar(user);
   initializeUserSidebar(user);
+  initializeProfileImage(user);
   addRelevantButtonsToArticle(user);
   addRelevantButtonsToComments(user);
 }

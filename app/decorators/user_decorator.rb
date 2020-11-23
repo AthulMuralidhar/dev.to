@@ -19,16 +19,16 @@ class UserDecorator < ApplicationDecorator
   ].freeze
 
   def cached_followed_tags
-    Rails.cache.fetch("user-#{id}-#{updated_at}/followed_tags_11-30", expires_in: 20.hours) do
-      follows = Follow.follower_tag(id).pluck(:followable_id, :points)
-      follows_map = follows.to_h
-
-      tags = Tag.where(id: follows_map.keys).order(hotness_score: :desc)
-      tags.each do |tag|
-        tag.points = follows_map[tag.id]
-      end
-      tags
+    follows_map = Rails.cache.fetch("user-#{id}-#{following_tags_count}-#{last_followed_at&.rfc3339}/followed_tags",
+                                    expires_in: 20.hours) do
+      Follow.follower_tag(id).pluck(:followable_id, :points).to_h
     end
+
+    tags = Tag.where(id: follows_map.keys).order(hotness_score: :desc)
+    tags.each do |tag|
+      tag.points = follows_map[tag.id]
+    end
+    tags
   end
 
   def darker_color(adjustment = 0.88)
@@ -49,12 +49,16 @@ class UserDecorator < ApplicationDecorator
     end
   end
 
+  def config_font_name
+    config_font.gsub("default", SiteConfig.default_font)
+  end
+
   def config_body_class
     body_class = [
       config_theme.tr("_", "-"),
-      "#{config_font.tr('_', '-')}-article-body",
+      "#{config_font_name.tr('_', '-')}-article-body",
       "trusted-status-#{trusted}",
-      "#{config_navbar.tr('_', '-')}-navbar-config",
+      "#{config_navbar.tr('_', '-')}-header",
     ]
     body_class.join(" ")
   end

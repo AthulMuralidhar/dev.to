@@ -11,13 +11,13 @@ RSpec.describe "CommentsCreate", type: :request do
     sign_in user
   end
 
-  def comment_params(params = {})
+  def comment_params(**kwargs)
     {
       comment: {
         body_markdown: new_body.call,
         commentable_id: article.id,
         commentable_type: "Article"
-      }.merge(params)
+      }.merge(kwargs)
     }
   end
 
@@ -35,9 +35,9 @@ RSpec.describe "CommentsCreate", type: :request do
 
   it "returns 429 Too Many Requests when a user reaches their rate limit" do
     allow(RateLimitChecker).to receive(:new).and_return(rate_limit_checker)
-    allow(rate_limit_checker).to receive(:limit_by_action).
-      with(:comment_creation).
-      and_return(true)
+    allow(rate_limit_checker).to receive(:limit_by_action)
+      .with(:comment_creation)
+      .and_return(true)
 
     post comments_path, params: comment_params
 
@@ -91,6 +91,77 @@ RSpec.describe "CommentsCreate", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(response.parsed_body["error"]).to be_present
+    end
+  end
+
+  context "when there's already a notification for comment" do
+    around do |example|
+      Sidekiq::Testing.inline!(&example)
+    end
+
+    let(:comment_author) { create(:user) }
+    let(:user_replier) { create(:user) }
+    let(:moderator_replier) { create(:user, :admin) }
+    let(:response_template) do
+      create(:response_template, type_of: "mod_comment",
+                                 content: text_mentioning_comment_author, user_id: nil)
+    end
+    let(:text_mentioning_comment_author) do
+      "Hello, @#{comment_author.username}"
+    end
+
+    it "doesn't create mention notification, when replying as regular user" do
+      comment = comment_on_article
+      reply_and_mention_comment_author(comment)
+
+      expect_no_duplicate_notifications_for_comment_author
+    end
+
+    it "doesn't create mention notification, when replying as moderator" do
+      comment = comment_on_article
+      reply_and_mention_comment_author_as_moderator(comment)
+
+      expect_no_duplicate_notifications_for_comment_author
+    end
+
+    private
+
+    def comment_on_article
+      sign_in comment_author
+      post comments_path, params: comment_params
+      expect_request_to_be_successful
+
+      Comment.first
+    end
+
+    def reply_and_mention_comment_author(comment)
+      sign_in user_replier
+      post comments_path, params: comment_params(
+        parent_id: comment.id,
+        body_markdown: text_mentioning_comment_author,
+      )
+      expect_request_to_be_successful
+    end
+
+    def reply_and_mention_comment_author_as_moderator(comment)
+      allow(SiteConfig).to receive(:mascot_user_id)
+        .and_return(moderator_replier.id)
+
+      sign_in moderator_replier
+      post moderator_create_comments_path, params: comment_params(
+        parent_id: comment.id,
+      ).merge(response_template: { id: response_template.id })
+      expect(response).to be_successful
+    end
+
+    def expect_no_duplicate_notifications_for_comment_author
+      expect(Mention.count).to eq 0
+      expect(Notification.where(user: comment_author).count).to eq 1
+    end
+
+    def expect_request_to_be_successful
+      expect(response.parsed_body["error"]).to be_nil
+      expect(response).to be_successful
     end
   end
 end

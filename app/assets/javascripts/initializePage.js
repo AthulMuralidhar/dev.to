@@ -1,16 +1,18 @@
 /*
-  global initializeLocalStorageRender, initializeStylesheetAppend, initializeBodyData,
+  global initializeLocalStorageRender, initializeBodyData,
   initializeAllChatButtons, initializeAllTagEditButtons, initializeUserFollowButts,
   initializeBaseTracking, initializeTouchDevice, initializeCommentsPage,
   initializeArticleDate, initializeArticleReactions, initNotifications,
   initializeCommentDate, initializeCommentDropdown, initializeSettings,
-  initializeFooterMod, initializeCommentPreview, initializeAdditionalContentBoxes,
+  initializeCommentPreview,
   initializeTimeFixer, initializeDashboardSort, initializePWAFunctionality,
   initializeEllipsisMenu, initializeArchivedPostFilter, initializeCreditsPage,
-  initializeUserProfilePage, initializePodcastPlayback, initializeDrawerSliders,
+  initializeUserProfilePage, initializeProfileInfoToggle, initializePodcastPlayback,
+  initializeVideoPlayback, initializeDrawerSliders, initializeProfileBadgesToggle,
   initializeHeroBannerClose, initializeOnboardingTaskCard, initScrolling,
   nextPage:writable, fetching:writable, done:writable, adClicked:writable,
-  initializeSpecialNavigationFunctionality
+  initializePaymentPointers, initializeSpecialNavigationFunctionality, initializeBroadcast,
+  initializeDateHelpers
 */
 
 function callInitializers() {
@@ -25,6 +27,7 @@ function callInitializers() {
         initializeAllChatButtons();
         initializeAllTagEditButtons();
       }
+      initializeBroadcast();
       initializeAllFollowButts();
       initializeUserFollowButts();
       initializeReadingListIcons();
@@ -37,18 +40,16 @@ function callInitializers() {
 
   initializeSpecialNavigationFunctionality();
   initializeBaseTracking();
+  initializePaymentPointers();
   initializeTouchDevice();
   initializeCommentsPage();
   initializeArticleDate();
   initializeArticleReactions();
   initNotifications();
-  initializeStylesheetAppend();
   initializeCommentDate();
   initializeCommentDropdown();
   initializeSettings();
-  initializeFooterMod();
   initializeCommentPreview();
-  initializeAdditionalContentBoxes();
   initializeTimeFixer();
   initializeDashboardSort();
   initializePWAFunctionality();
@@ -56,10 +57,14 @@ function callInitializers() {
   initializeArchivedPostFilter();
   initializeCreditsPage();
   initializeUserProfilePage();
+  initializeProfileInfoToggle();
+  initializeProfileBadgesToggle();
   initializePodcastPlayback();
+  initializeVideoPlayback();
   initializeDrawerSliders();
   initializeHeroBannerClose();
   initializeOnboardingTaskCard();
+  initializeDateHelpers();
 
   function freezeScrolling(event) {
     event.preventDefault();
@@ -79,6 +84,5 @@ function callInitializers() {
 
 function initializePage() {
   initializeLocalStorageRender();
-  initializeStylesheetAppend();
   callInitializers();
 }

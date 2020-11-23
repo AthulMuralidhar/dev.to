@@ -21,9 +21,10 @@ class Notification < ApplicationRecord
   scope :for_organization_mentions, lambda { |org_id|
     where(organization_id: org_id, notifiable_type: "Mention", user_id: nil)
   }
+  scope :unread, -> { where(read: false) }
 
   class << self
-    def send_new_follower_notification(follow, is_read = false)
+    def send_new_follower_notification(follow, is_read: false)
       return unless follow && Follow.need_new_follower_notification_for?(follow.followable_type)
       return if follow.followable_type == "User" && UserBlock.blocking?(follow.followable_id, follow.follower_id)
 
@@ -31,7 +32,7 @@ class Notification < ApplicationRecord
       Notifications::NewFollowerWorker.perform_async(follow_data, is_read)
     end
 
-    def send_new_follower_notification_without_delay(follow, is_read = false)
+    def send_new_follower_notification_without_delay(follow, is_read: false)
       return unless follow && Follow.need_new_follower_notification_for?(follow.followable_type)
       return if follow.followable_type == "User" && UserBlock.blocking?(follow.followable_id, follow.follower_id)
 
@@ -80,6 +81,7 @@ class Notification < ApplicationRecord
 
     def send_moderation_notification(notifiable)
       # TODO: make this work for articles in the future. only works for comments right now
+      return unless notifiable.commentable
       return if UserBlock.blocking?(notifiable.commentable.user_id, notifiable.user_id)
 
       Notifications::ModerationNotificationWorker.perform_async(notifiable.id)
@@ -115,8 +117,8 @@ class Notification < ApplicationRecord
       Notifications::UpdateWorker.perform_async(notifiable.id, notifiable.class.name, action)
     end
 
-    def fast_destroy_old_notifications(destroy_before_timestamp = 4.months.ago)
-      sql = <<-SQL
+    def fast_destroy_old_notifications(destroy_before_timestamp = 3.months.ago)
+      sql = <<-SQL.squish
         DELETE FROM notifications
         WHERE notifications.id IN (
           SELECT notifications.id

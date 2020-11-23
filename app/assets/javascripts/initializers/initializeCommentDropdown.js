@@ -1,25 +1,10 @@
-'use strict';
+/* global Runtime */
 
 function initializeCommentDropdown() {
   const announcer = document.getElementById('article-copy-link-announcer');
 
-  function isClipboardSupported() {
-    return (
-      typeof navigator.clipboard !== "undefined" &&
-      navigator.clipboard !== null
-    );
-  }
-
-  function isNativeAndroidDevice() {
-    return (
-      navigator.userAgent === 'DEV-Native-android' &&
-      typeof AndroidBridge !== "undefined" &&
-      AndroidBridge !== null
-    );
-  }
-
   function removeClass(className) {
-    return element => element.classList.remove(className);
+    return (element) => element.classList.remove(className);
   }
 
   function getAllByClassName(className) {
@@ -30,7 +15,7 @@ function initializeCommentDropdown() {
     const { activeElement } = document;
     const input =
       activeElement.localName === 'clipboard-copy'
-        ? activeElement.querySelector('input')
+        ? activeElement.getElementsByTagName('input')[0]
         : document.getElementById('article-copy-link-input');
     input.focus();
     input.setSelectionRange(0, input.value.length);
@@ -43,36 +28,31 @@ function initializeCommentDropdown() {
     }
   }
 
-  function execCopyText() {
-    showAnnouncer();
-    document.execCommand('copy');
+  function copyPermalink(event) {
+    event.preventDefault();
+    const permalink = event.target.href;
+
+    Runtime.copyToClipboard(permalink).then(() => {
+      // eslint-disable-next-line no-undef
+      addSnackbarItem({ message: 'Copied to clipboard' });
+    });
   }
 
-  function copyText() {
+  function copyArticleLink() {
     const inputValue = document.getElementById('article-copy-link-input').value;
-    if (isNativeAndroidDevice()) {
-      AndroidBridge.copyToClipboard(inputValue);
+    Runtime.copyToClipboard(inputValue).then(() => {
       showAnnouncer();
-    } else if (isClipboardSupported()) {
-      navigator.clipboard.writeText(inputValue)
-        .then(() => {
-          showAnnouncer();
-        })
-        .catch((err) => {
-          execCopyText();
-        });
-    } else {
-      execCopyText();
-    }
+    });
   }
 
   function shouldCloseDropdown(event) {
+    var copyIcon = document.getElementById('article-copy-icon');
+    var isCopyIconChild = copyIcon && copyIcon.contains(event.target);
     return !(
       event.target.matches('.dropdown-icon') ||
       event.target.matches('.dropbtn') ||
       event.target.matches('clipboard-copy') ||
-      event.target.matches('clipboard-copy input') ||
-      event.target.matches('clipboard-copy img') ||
+      isCopyIconChild ||
       event.target.parentElement.classList.contains('dropdown-link-row')
     );
   }
@@ -89,12 +69,12 @@ function initializeCommentDropdown() {
       'clipboard-copy',
     )[0];
     if (clipboardCopyElement) {
-      clipboardCopyElement.removeEventListener('click', copyText);
+      clipboardCopyElement.removeEventListener('click', copyArticleLink);
     }
   }
 
   function removeAllShowing() {
-    getAllByClassName('showing').forEach(removeClass('showing'));
+    getAllByClassName('crayons-dropdown').forEach(removeClass('block'));
   }
 
   function outsideClickListener(event) {
@@ -106,34 +86,68 @@ function initializeCommentDropdown() {
   }
 
   function dropdownFunction(e) {
-    var button = e.target.parentElement;
-    var dropdownContent = button.parentElement.getElementsByClassName(
-      'dropdown-content',
+    const button = e.currentTarget;
+    const dropdownContent = button.parentElement.getElementsByClassName(
+      'crayons-dropdown',
     )[0];
-    if (dropdownContent.classList.contains('showing')) {
-      dropdownContent.classList.remove('showing');
+
+    if (!dropdownContent) {
+      return;
+    }
+
+    // Android native apps have enhanced sharing capabilities for Articles
+    const articleShowMoreClicked = button.id === 'article-show-more-button';
+    if (articleShowMoreClicked && Runtime.isNativeAndroid('shareText')) {
+      AndroidBridge.shareText(location.href);
+      return;
+    }
+
+    finalizeAbuseReportLink(
+      dropdownContent.getElementsByClassName('report-abuse-link-wrapper')[0],
+    );
+
+    if (dropdownContent.classList.contains('block')) {
+      dropdownContent.classList.remove('block');
       removeClickListener();
       removeCopyListener();
       hideAnnouncer();
     } else {
       removeAllShowing();
-      dropdownContent.classList.add('showing');
+      dropdownContent.classList.add('block');
       const clipboardCopyElement = document.getElementsByTagName(
         'clipboard-copy',
       )[0];
 
       document.addEventListener('click', outsideClickListener);
       if (clipboardCopyElement) {
-        clipboardCopyElement.addEventListener('click', copyText);
+        clipboardCopyElement.addEventListener('click', copyArticleLink);
       }
     }
   }
 
+  function finalizeAbuseReportLink(reportAbuseLink) {
+    // Add actual link location (SEO doesn't like these "useless" links, so adding in here instead of in HTML)
+    if (!reportAbuseLink) {
+      return;
+    }
+
+    reportAbuseLink.innerHTML = `<a href="${reportAbuseLink.dataset.path}" class="crayons-link crayons-link--block">Report abuse</a>`;
+  }
+
   function addDropdownListener(dropdown) {
-    dropdown.addEventListener('click', dropdownFunction);
+    if (!dropdown.getAttribute('has-dropdown-listener')) {
+      dropdown.addEventListener('click', dropdownFunction);
+      dropdown.setAttribute('has-dropdown-listener', 'true');
+    }
+  }
+
+  function copyPermalinkListener(copyPermalinkButton) {
+    copyPermalinkButton.addEventListener('click', copyPermalink);
   }
 
   setTimeout(function addListeners() {
     getAllByClassName('dropbtn').forEach(addDropdownListener);
+
+    getAllByClassName('permalink-copybtn').forEach(copyPermalinkListener);
   }, 100);
 }

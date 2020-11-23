@@ -1,7 +1,14 @@
+# rubocop:disable Metrics/BlockLength
 Rails.application.configure do
-  # Verifies that versions and hashed value of the package contents in the project's package.json
-  config.webpacker.check_yarn_integrity = false
+  # Allow the app to know when booted up in context where we haven't set ENV vars
+  # If we have not set this ENV var it means we haven't set the environment
+  ENV["ENV_AVAILABLE"] = ENV["APP_DOMAIN"].present?.to_s
 
+  if ENV["ENV_AVAILABLE"] == "false"
+    # We still need _something_ here, but if booted without environment (aka asset precompile),
+    # it shouldn't need to be the proper value
+    ENV["SECRET_KEY_BASE"] = "NOT_SET"
+  end
   # Settings specified here will take precedence over those in config/application.rb.
 
   # Code is not reloaded between requests.
@@ -20,6 +27,10 @@ Rails.application.configure do
   # Ensures that a master key has been made available in either ENV["RAILS_MASTER_KEY"]
   # or in config/master.key. This key is used to decrypt credentials (and other encrypted files).
   # config.require_master_key = true
+
+  # Attempt to read encrypted secrets from `config/secrets.yml.enc`.
+  # Requires an encryption key in `ENV["RAILS_MASTER_KEY"]` or
+  # `config/secrets.yml.key`.
   config.read_encrypted_secrets = true
 
   # Disable serving static files from the `/public` folder by default since
@@ -30,7 +41,7 @@ Rails.application.configure do
   }
 
   # Compress JavaScripts and CSS.
-  config.assets.js_compressor = Uglifier.new(harmony: true)
+  config.assets.js_compressor = :uglify_with_source_maps
   # config.assets.css_compressor = :sass
 
   # Do not fallback to assets pipeline if a precompiled asset is missed.
@@ -40,7 +51,7 @@ Rails.application.configure do
   config.assets.digest = true
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
-  # config.action_controller.asset_host = 'http://assets.example.com'
+  config.action_controller.asset_host = ENV["FASTLY_CDN_URL"]
 
   # Specifies the header that your server uses for sending files.
   # config.action_dispatch.x_sendfile_header = 'X-Sendfile' # for Apache
@@ -54,19 +65,17 @@ Rails.application.configure do
 
   # Use the lowest log level to ensure availability of diagnostic information
   # when problems arise.
-  config.log_level = :debug
+  config.log_level = ENV["LOG_LEVEL"] || :error
 
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different logger for distributed setups.
-  # config.logger = ActiveSupport::TaggedLogging.new(SyslogLogger.new)
-
   # Use a different cache store in production.
-  # config.cache_store = :mem_cache_store
-
-  # Enable serving of images, stylesheets, and JavaScripts from an asset server.
-  config.action_controller.asset_host = ENV["FASTLY_CDN_URL"]
+  # DEV uses the RedisCloud Heroku Add-On which comes with the predefined env variable REDISCLOUD_URL
+  redis_url = ENV["REDISCLOUD_URL"]
+  redis_url ||= ENV["REDIS_URL"]
+  default_expiration = 24.hours.to_i
+  config.cache_store = :redis_cache_store, { url: redis_url, expires_in: default_expiration }
 
   # Use a real queuing backend for Active Job (and separate queues per environment)
   # config.active_job.queue_adapter     = :resque
@@ -85,58 +94,53 @@ Rails.application.configure do
   # Send deprecation notices to registered listeners.
   config.active_support.deprecation = :notify
 
+  # Filter sensitive information from production logs
+  config.filter_parameters += %i[
+    auth_data_dump content email encrypted
+    encrypted_password message_html message_markdown
+    password previous_refresh_token refresh_token secret
+    to token current_sign_in_ip last_sign_in_ip
+    reset_password_token remember_token unconfirmed_email
+  ]
+
   # Use default logging formatter so that PID and timestamp are not suppressed.
-  # config.log_formatter = ::Logger::Formatter.new
   config.log_formatter = ::Logger::Formatter.new
 
-  # Use a different logger for distributed setups.
-  # require 'syslog/logger'
-  # config.logger = ActiveSupport::TaggedLogging.new(Syslog::Logger.new 'app-name')
-
   if ENV["RAILS_LOG_TO_STDOUT"].present?
-    logger           = ActiveSupport::Logger.new(STDOUT)
+    # Use a different logger for distributed setups.
+    # require 'syslog/logger'
+    # config.logger = ActiveSupport::TaggedLogging.new(Syslog::Logger.new 'app-name')
+
+    logger           = ActiveSupport::Logger.new($stdout)
     logger.formatter = config.log_formatter
     config.logger    = ActiveSupport::TaggedLogging.new(logger)
   end
 
-  # Timber.io logger
-  send_logs_to_timber = ENV["SEND_LOGS_TO_TIMBER"] || "true" # <---- production should send timber logs by default
-  log_device = send_logs_to_timber == "true" ? Timber::LogDevices::HTTP.new(ENV["TIMBER"]) : STDOUT
-  logger = Timber::Logger.new(log_device)
-  logger.level = config.log_level
-  config.logger = ActiveSupport::TaggedLogging.new(logger)
-
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
 
-  # DEV uses the RedisCloud Heroku Add-On which comes with the predefined env variable REDISCLOUD_URL
-  redis_url = ENV["REDISCLOUD_URL"]
-  redis_url ||= ENV["REDIS_URL"]
-  DEFAULT_EXPIRATION = 24.hours.to_i.freeze
-  config.cache_store = :redis_cache_store, { url: redis_url, expires_in: DEFAULT_EXPIRATION }
-
-  config.app_domain = ENV["APP_DOMAIN"]
+  protocol = ENV["APP_PROTOCOL"] || "http://"
 
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.perform_deliveries = true
-  config.action_mailer.default_url_options = { host: ENV["APP_PROTOCOL"] + ENV["APP_DOMAIN"] }
+  config.action_mailer.default_url_options = { host: protocol + ENV["APP_DOMAIN"].to_s }
   ActionMailer::Base.smtp_settings = {
     address: "smtp.sendgrid.net",
     port: "587",
     authentication: :plain,
-    user_name: ENV["SENDGRID_USERNAME_ACCEL"],
-    password: ENV["SENDGRID_PASSWORD_ACCEL"],
+    user_name: "apikey",
+    password: ENV["SENDGRID_API_KEY"],
     domain: ENV["APP_DOMAIN"],
     enable_starttls_auto: true
   }
 
-  if ENV["HEROKU_APP_URL"] != ENV["APP_DOMAIN"]
+  if ENV["HEROKU_APP_URL"].present? && ENV["HEROKU_APP_URL"] != ENV["APP_DOMAIN"]
     config.middleware.use Rack::HostRedirect,
                           ENV["HEROKU_APP_URL"] => ENV["APP_DOMAIN"]
   end
 end
+# rubocop:enable Metrics/BlockLength
 
 Rails.application.routes.default_url_options = {
-  host: Rails.application.config.app_domain,
-  protocol: ENV["APP_PROTOCOL"].delete_suffix("://")
+  protocol: (ENV["APP_PROTOCOL"] || "http://").delete_suffix("://")
 }

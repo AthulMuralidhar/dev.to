@@ -48,9 +48,7 @@ function reactToReadingListButtonClick(event) {
   var userStatus;
   event.preventDefault();
   sendHapticMessage('medium');
-  userStatus = document
-    .getElementsByTagName('body')[0]
-    .getAttribute('data-user-status');
+  userStatus = document.body.getAttribute('data-user-status');
   if (userStatus === 'logged-out') {
     showModal('add-to-readinglist-from-index');
     return;
@@ -93,7 +91,8 @@ function renderNewSidebarCount(button, json) {
     newCount = count - 1;
   }
   document.getElementById('reading-list-count').dataset.count = newCount;
-  document.getElementById('reading-list-count').innerHTML = newCount;
+  document.getElementById('reading-list-count').innerHTML =
+    newCount > 0 ? newCount : '';
 }
 
 function buttonFormData(button) {

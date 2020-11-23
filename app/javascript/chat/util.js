@@ -1,3 +1,5 @@
+import { fetchSearch } from '../utilities/search';
+
 import 'intersection-observer';
 
 export function getCsrfToken() {
@@ -47,7 +49,7 @@ export function scrollToBottom() {
 }
 
 export function setupObserver(callback) {
-  const sentinel = document.querySelector('#messagelist__sentinel');
+  const sentinel = document.getElementById('messagelist__sentinel');
   const somethingObserver = new IntersectionObserver(callback, {
     threshold: [0, 1],
   });
@@ -106,4 +108,19 @@ export const channelSorter = (channels, currentUserId, filterQuery) => {
     )
     .filter((channel) => !ChannelIds[0].includes(channel.chat_channel_id));
   return { activeChannels, discoverableChannels };
+};
+
+export const createDataHash = (additionalFilters, searchParams) => {
+  const dataHash = {};
+  if (additionalFilters.filters) {
+    const [key, value] = additionalFilters.filters.split(':');
+    dataHash[key] = value;
+  }
+  dataHash.per_page = 30;
+  dataHash.page = searchParams.paginationNumber;
+  dataHash.channel_text = searchParams.query;
+  if (searchParams.searchType === 'discoverable') {
+    dataHash.user_id = 'all';
+  }
+  return fetchSearch('chat_channels', dataHash);
 };

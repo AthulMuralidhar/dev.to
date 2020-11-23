@@ -1,6 +1,4 @@
 module ApplicationHelper
-  include CloudinaryHelper
-
   # rubocop:disable Performance/OpenStruct
   DELETED_USER = OpenStruct.new(
     id: nil,
@@ -13,6 +11,16 @@ module ApplicationHelper
   )
   # rubocop:enable Performance/OpenStruct
 
+  LARGE_USERBASE_THRESHOLD = 1000
+
+  SUBTITLES = {
+    "week" => "Top posts this week",
+    "month" => "Top posts this month",
+    "year" => "Top posts this year",
+    "infinity" => "All posts",
+    "latest" => "Latest posts"
+  }.freeze
+
   def user_logged_in_status
     user_signed_in? ? "logged-in" : "logged-out"
   end
@@ -21,6 +29,7 @@ module ApplicationHelper
     "#{controller_name}-#{controller.action_name}"
   end
 
+  # rubocop:disable Rails/HelperInstanceVariable
   def view_class
     if @podcast_episode_show # custom due to edge cases
       "stories stories-show podcast_episodes-show"
@@ -30,12 +39,13 @@ module ApplicationHelper
       "#{controller_name} #{controller_name}-#{controller.action_name}"
     end
   end
+  # rubocop:enable Rails/HelperInstanceVariable
 
   def title(page_title)
     derived_title = if page_title.include?(community_name)
                       page_title
                     elsif user_signed_in?
-                      "#{page_title} - #{community_qualified_name} 👩‍💻👨‍💻"
+                      "#{page_title} - #{community_qualified_name} #{community_emoji}"
                     else
                       "#{page_title} - #{community_name}"
                     end
@@ -44,47 +54,29 @@ module ApplicationHelper
   end
 
   def title_with_timeframe(page_title:, timeframe:, content_for: false)
-    sub_titles = {
-      "week" => "Top posts this week",
-      "month" => "Top posts this month",
-      "year" => "Top posts this year",
-      "infinity" => "All posts",
-      "latest" => "Latest posts"
-    }
-
-    if timeframe.blank? || sub_titles[timeframe].blank?
+    if timeframe.blank? || SUBTITLES[timeframe].blank?
       return content_for ? title(page_title) : page_title
     end
 
-    title_text = "#{page_title} - #{sub_titles.fetch(timeframe)}"
+    title_text = "#{page_title} - #{SUBTITLES.fetch(timeframe)}"
     content_for ? title(title_text) : title_text
   end
 
-  def icon(name, pixels = "20")
-    image_tag(icon_url(name), alt: name, class: "icon-img", height: pixels, width: pixels)
+  def optimized_image_url(url, width: 500, quality: 80, fetch_format: "auto", random_fallback: true)
+    fallback_image = asset_path("#{rand(1..40)}.png") if random_fallback
+
+    return unless (image_url = url.presence || fallback_image)
+
+    normalized_url = Addressable::URI.parse(image_url).normalize.to_s
+    Images::Optimizer.call(normalized_url, width: width, quality: quality, fetch_format: fetch_format)
   end
 
-  def icon_url(name)
-    postfix = {
-      "twitter" => "v1456342401/twitter-logo-silhouette_1_letrqc.png",
-      "github" => "v1456342401/github-logo_m841aq.png",
-      "link" => "v1456342401/link-symbol_apfbll.png",
-      "volume" => "v1461589297/technology_1_aefet2.png",
-      "volume-mute" => "v1461589297/technology_jiugwb.png"
-    }.fetch(name, "v1456342953/star-in-black-of-five-points-shape_sor40l.png")
+  def optimized_image_tag(image_url, optimizer_options: {}, image_options: {})
+    image_options[:width] ||= optimizer_options[:width]
+    image_options[:height] ||= optimizer_options[:height]
+    updated_image_url = Images::Optimizer.call(image_url, optimizer_options)
 
-    "https://res.cloudinary.com/#{ApplicationConfig['CLOUDINARY_CLOUD_NAME']}/image/upload/#{postfix}"
-  end
-
-  def cloudinary(url, width = "500", quality = 80, format = "jpg")
-    cl_image_path(url || asset_path("#{rand(1..40)}.png"),
-                  type: "fetch",
-                  width: width,
-                  crop: "limit",
-                  quality: quality,
-                  flags: "progressive",
-                  fetch_format: format,
-                  sign_url: true)
+    image_tag(updated_image_url, image_options)
   end
 
   def cloud_cover_url(url)
@@ -101,8 +93,16 @@ module ApplicationHelper
     end
   end
 
+  def invite_only_mode?
+    SiteConfig.invite_only_mode?
+  end
+
+  def any_enabled_auth_providers?
+    authentication_enabled_providers.any?
+  end
+
   def beautified_url(url)
-    url.sub(/\A((http[s]?|ftp):\/)?\//, "").sub(/\?.*/, "").chomp("/")
+    url.sub(%r{\A((https?|ftp):/)?/}, "").sub(/\?.*/, "").chomp("/")
   rescue StandardError
     url
   end
@@ -121,11 +121,11 @@ module ApplicationHelper
                                             tags: %w[p b i em strike strong u br]
   end
 
-  def follow_button(followable, style = "full")
+  def follow_button(followable, style = "full", classes = "")
     return if followable == DELETED_USER
 
     tag :button, # Yikes
-        class: "cta follow-action-button",
+        class: "crayons-btn follow-action-button #{classes}",
         data: {
           :info => { id: followable.id, className: followable.class.name, style: style }.to_json,
           "follow-action-button" => true
@@ -155,34 +155,51 @@ module ApplicationHelper
 
   def logo_svg
     if SiteConfig.logo_svg.present?
-      SiteConfig.logo_svg.html_safe
+      SiteConfig.logo_svg.html_safe # rubocop:disable Rails/OutputSafety
     else
       inline_svg_tag("devplain.svg", class: "logo", size: "20% * 20%", aria: true, title: "App logo")
     end
   end
 
+  def safe_logo_url(logo)
+    logo.presence || SiteConfig.logo_png
+  end
+
   def community_name
-    @community_name ||= ApplicationConfig["COMMUNITY_NAME"]
+    @community_name ||= SiteConfig.community_name
+  end
+
+  def community_emoji
+    @community_emoji ||= SiteConfig.community_emoji
   end
 
   def community_qualified_name
-    "#{community_name} Community"
+    return "#{community_name} #{SiteConfig.collective_noun}" unless SiteConfig.collective_noun_disabled
+
+    community_name
   end
 
-  def cache_key_heroku_slug(path)
-    heroku_slug_commit = ApplicationConfig["HEROKU_SLUG_COMMIT"]
-    return path if heroku_slug_commit.blank?
+  def release_adjusted_cache_key(path)
+    release_footprint = ApplicationConfig["RELEASE_FOOTPRINT"]
+    return path if release_footprint.blank?
 
-    "#{path}-#{heroku_slug_commit}"
+    "#{path}-#{params[:locale]}-#{release_footprint}-#{SiteConfig.admin_action_taken_at.rfc3339}"
   end
 
   def copyright_notice
-    start_year = ApplicationConfig["COMMUNITY_COPYRIGHT_START_YEAR"]
+    start_year = SiteConfig.community_copyright_start_year.to_s
     current_year = Time.current.year.to_s
     return start_year if current_year == start_year
-    return current_year if start_year.strip.length.zero?
+    return current_year if start_year.strip.length < 4 # 978 is not a valid year!
 
     "#{start_year} - #{current_year}"
+  end
+
+  def collection_link(collection, **kwargs)
+    size_string = "#{collection.articles.published.size} Part Series"
+    body = collection.slug.present? ? "#{collection.slug} (#{size_string})" : size_string
+
+    link_to body, collection.path, **kwargs
   end
 
   def email_link(type = :default, text: nil, additional_info: nil)
@@ -196,14 +213,30 @@ module ApplicationHelper
     SiteConfig.community_member_label.pluralize
   end
 
-  # Creates an app internal URL
-  #
-  # @note Uses protocol and domain specified in the environment, ensure they are set.
-  # @param uri [URI, String] parts we want to merge into the URL, e.g. path, fragment
-  # @example Retrieve the base URL
-  #  app_url #=> "https://dev.to"
-  # @example Add a path
-  #  app_url("internal") #=> "https://dev.to/internal"
+  def meta_keywords_default
+    return if SiteConfig.meta_keywords[:default].blank?
+
+    tag.meta name: "keywords", content: SiteConfig.meta_keywords[:default]
+  end
+
+  def meta_keywords_article(article_tags = nil)
+    return if SiteConfig.meta_keywords[:article].blank?
+
+    content = if article_tags.present?
+                "#{article_tags}, #{SiteConfig.meta_keywords[:article]}"
+              else
+                SiteConfig.meta_keywords[:article]
+              end
+
+    tag.meta name: "keywords", content: content
+  end
+
+  def meta_keywords_tag(tag_name)
+    return if SiteConfig.meta_keywords[:tag].blank?
+
+    tag.meta name: "keywords", content: "#{SiteConfig.meta_keywords[:tag]}, #{tag_name}"
+  end
+
   def app_url(uri = nil)
     URL.url(uri)
   end
@@ -239,5 +272,28 @@ module ApplicationHelper
   def sanitize_and_decode(str)
     # using to_str instead of to_s to prevent removal of html entity code
     HTMLEntities.new.decode(sanitize(str).to_str)
+  end
+
+  def estimated_user_count
+    User.registered.estimated_count
+  end
+
+  def display_estimated_user_count?
+    estimated_user_count > LARGE_USERBASE_THRESHOLD
+  end
+
+  # rubocop:disable Rails/OutputSafety
+  def admin_config_label(method, content = nil)
+    content ||= raw("<span>#{method.to_s.humanize}</span>")
+    if method.to_sym.in?(VerifySetupCompleted::MANDATORY_CONFIGS)
+      content = safe_join([content, raw("<span class='crayons-indicator crayons-indicator--critical'>Required</span>")])
+    end
+
+    tag.label(content, class: "site-config__label crayons-field__label", for: "site_config_#{method}")
+  end
+  # rubocop:enable Rails/OutputSafety
+
+  def admin_config_description(content)
+    tag.p(content, class: "crayons-field__description") unless content.empty?
   end
 end

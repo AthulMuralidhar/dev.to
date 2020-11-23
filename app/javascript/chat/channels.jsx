@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
 // eslint-disable-next-line import/no-unresolved
-import ConfigImage from 'images/three-dots.svg';
+import ConfigImage from 'images/overflow-horizontal.svg';
 import ChannelButton from './components/channelButton';
 import { channelSorter } from './util';
 
@@ -11,7 +11,7 @@ const Channels = ({
   unopenedChannelIds,
   handleSwitchChannel,
   expanded,
-  filterQuery,
+  filterQuery = '',
   channelsLoaded,
   currentUserId,
   triggerActiveContent,
@@ -28,11 +28,13 @@ const Channels = ({
           channel={channel}
           discoverableChannel
           triggerActiveContent={triggerActiveContent}
+          isActiveChannel={
+            parseInt(activeChannelId, 10) === channel.chat_channel_id
+          }
         />
       );
     },
   );
-
   const channels = sortedChatChannels.activeChannels.map((channel) => {
     const isActive = parseInt(activeChannelId, 10) === channel.chat_channel_id;
     const isUnopened =
@@ -60,17 +62,16 @@ const Channels = ({
     (channels.length === 0 || channels[0].messages_count === 0)
   ) {
     topNotice = (
-      <div className="chatchannels__channelslistheader">
+      <div className="chatchannels__channelslistheader" role="alert">
         <span role="img" aria-label="emoji">
           👋
-        </span>
-        {' '}
+        </span>{' '}
         Welcome to
-        <b> DEV Connect</b>
-        ! You may message anyone you mutually follow.
+        <b> Connect</b>! You may message anyone you mutually follow.
       </div>
     );
   }
+
   let channelsListFooter = '';
   if (channels.length === 30) {
     channelsListFooter = (
@@ -79,12 +80,17 @@ const Channels = ({
   }
   let configFooter = '';
   if (expanded) {
+    // TODO: The <div /> below should be converted into a real menu or <nav />
     configFooter = (
       <div className="chatchannels__config">
-        <img alt="" src={ConfigImage} style={{ height: '18px' }} />
-        <div className="chatchannels__configmenu">
-          <a href="/settings">DEV Settings</a>
-          <a href="/report-abuse">Report Abuse</a>
+        <img alt="configration" src={ConfigImage} style={{ height: '18px' }} />
+        <div className="chatchannels__configmenu" role="menu">
+          <a href="/settings" role="menuitem">
+            Settings
+          </a>
+          <a href="/report-abuse" role="menuitem">
+            Report Abuse
+          </a>
         </div>
       </div>
     );
@@ -94,10 +100,11 @@ const Channels = ({
       <div
         className="chatchannels__channelslist"
         id="chatchannels__channelslist"
+        data-testid="chat-channels-list"
       >
         {topNotice}
         {channels}
-        {discoverableChannels.length > 0 ? (
+        {discoverableChannels.length > 0 && filterQuery.length > 0 ? (
           <div>
             <span className="crayons-indicator crayons-indicator--">
               Global Channel Search

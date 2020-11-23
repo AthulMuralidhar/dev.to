@@ -19,6 +19,11 @@ RSpec.describe "UserProfiles", type: :request do
       expect(response.body).to include "Pinned"
     end
 
+    it "calls user by their username in the 'more info' area" do
+      get "/#{user.username}"
+      expect(response.body).to include "More info about @#{user.username}"
+    end
+
     it "does not render pins if they don't exist" do
       get "/#{user.username}"
       expect(response.body).not_to include "Pinned"
@@ -46,6 +51,11 @@ RSpec.describe "UserProfiles", type: :request do
       expect { get "/#{banishable_user.reload.username}" }.to raise_error(ActiveRecord::RecordNotFound)
     end
 
+    it "raises not found if user not registered" do
+      user.update_column(:registered, false)
+      expect { get "/#{user.username}" }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
     it "renders noindex meta if banned" do
       user.add_role(:banned)
       get "/#{user.username}"
@@ -67,6 +77,18 @@ RSpec.describe "UserProfiles", type: :request do
     it "does not render feed link if no stories" do
       get "/#{user.username}"
       expect(response.body).not_to include("/feed/#{user.username}")
+    end
+
+    it "renders user payment pointer if set" do
+      user.update_column(:payment_pointer, "test-payment-pointer")
+      get "/#{user.username}"
+      expect(response.body).to include "author-payment-pointer"
+      expect(response.body).to include "test-payment-pointer"
+    end
+
+    it "does not render payment pointer if not set" do
+      get "/#{user.username}"
+      expect(response.body).not_to include "author-payment-pointer"
     end
 
     context "when organization" do
@@ -170,13 +192,13 @@ RSpec.describe "UserProfiles", type: :request do
     it "redirects to admin" do
       user = create(:user)
       get "/#{user.username}/admin"
-      expect(response.body).to redirect_to "/admin/users/#{user.id}/edit"
+      expect(response.body).to redirect_to "/resource_admin/users/#{user.id}/edit"
     end
 
     it "redirects to moderate" do
       user = create(:user)
       get "/#{user.username}/moderate"
-      expect(response.body).to redirect_to "/internal/users/#{user.id}"
+      expect(response.body).to redirect_to "/admin/users/#{user.id}"
     end
   end
 end

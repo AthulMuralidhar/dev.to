@@ -1,9 +1,9 @@
 class RssReader
-  def self.get_all_articles(force = true)
-    new.get_all_articles(force)
+  def self.get_all_articles(force: true)
+    new.get_all_articles(force: force)
   end
 
-  def get_all_articles(force = true)
+  def get_all_articles(force: true)
     articles = []
 
     User.where.not(feed_url: [nil, ""]).find_each do |user|
@@ -39,36 +39,29 @@ class RssReader
       article = make_from_rss_item(item, user, feed)
       articles.append(article)
     rescue StandardError => e
-      log_error(
-        "RssReaderError: occurred while creating article",
+      report_error(
+        e,
         rss_reader_info: {
-          user: user.username,
+          username: user.username,
           feed_url: user.feed_url,
-          item_count: get_item_count_error(feed),
-          error: e
+          item_count: item_count_error(feed),
+          error: "RssReaderError: occurred while creating article #{item.url}"
         },
       )
     end
 
     articles
   rescue StandardError => e
-    log_error(
-      "RssReaderError: occurred while fetching feed",
+    report_error(
+      e,
       rss_reader_info: {
-        user: user.username,
+        username: user.username,
         feed_url: user.feed_url,
-        item_count: get_item_count_error(feed),
-        error: e
+        item_count: item_count_error(feed),
+        error_message: "RssReaderError: occurred while fetching feed"
       },
     )
-  end
-
-  def get_item_count_error(feed)
-    if feed
-      feed.entries ? feed.entries.length : "no count"
-    else
-      "NIL FEED, INVALID URL"
-    end
+    []
   end
 
   def fetch_rss(url)
@@ -77,7 +70,7 @@ class RssReader
   end
 
   def make_from_rss_item(item, user, feed)
-    return if medium_reply?(item) || article_exists?(user, item)
+    return if Feeds::CheckItemMediumReply.call(item) || Feeds::CheckItemPreviouslyImported.call(item, user)
 
     feed_source_url = item.url.strip.split("?source=")[0]
     article = Article.create!(
@@ -94,33 +87,14 @@ class RssReader
     article
   end
 
-  def get_host_without_www(url)
-    url = "http://#{url}" if URI.parse(url).scheme.nil?
-    host = URI.parse(url).host.downcase
-    host.start_with?("www.") ? host[4..] : host
+  def report_error(error, metadata)
+    Honeybadger.context(metadata)
+    Honeybadger.notify(error)
   end
 
-  def medium_reply?(item)
-    get_host_without_www(item.url.strip) == "medium.com" &&
-      !item[:categories] &&
-      content_is_not_the_title?(item)
-  end
+  def item_count_error(feed)
+    return "NIL FEED, INVALID URL" unless feed
 
-  def content_is_not_the_title?(item)
-    # [[:space:]] removes all whitespace, including unicode ones.
-    content = item.content.gsub(/[[:space:]]/, " ")
-    title = item.title.delete("…")
-    content.include?(title)
-  end
-
-  def article_exists?(user, item)
-    title = item.title.strip.gsub('"', '\"')
-    feed_source_url = item.url.strip.split("?source=")[0]
-    relation = user.articles
-    relation.where(title: title).or(relation.where(feed_source_url: feed_source_url)).exists?
-  end
-
-  def log_error(error_msg, metadata)
-    Rails.logger.error(error_msg, metadata)
+    feed.entries ? feed.entries.length : "no count"
   end
 end

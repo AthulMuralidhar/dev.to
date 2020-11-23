@@ -1,8 +1,13 @@
 class Podcast < ApplicationRecord
   resourcify
 
-  has_many :podcast_episodes
-  belongs_to :creator, class_name: "User", inverse_of: :created_podcasts, foreign_key: :creator_id, optional: true
+  belongs_to :creator, class_name: "User", inverse_of: :created_podcasts, optional: true
+
+  has_many :podcast_episodes, dependent: :destroy
+
+  # order here is important, the :through association has to be defined after the m2m
+  has_many :podcast_ownerships, dependent: :destroy
+  has_many :owners, through: :podcast_ownerships
 
   mount_uploader :image, ProfileImageUploader
   mount_uploader :pattern_image, ProfileImageUploader
@@ -29,9 +34,9 @@ class Podcast < ApplicationRecord
   alias_attribute :name, :title
 
   def existing_episode(item)
-    episode = PodcastEpisode.where(media_url: item.enclosure_url).
-      or(PodcastEpisode.where(title: item.title)).
-      or(PodcastEpisode.where(guid: item.guid.to_s)).presence
+    episode = PodcastEpisode.where(media_url: item.enclosure_url)
+      .or(PodcastEpisode.where(title: item.title))
+      .or(PodcastEpisode.where(guid: item.guid.to_s)).presence
     # if unique_website_url? is set to true (the default value), we try to find an episode by website_url as well
     # if unique_website_url? is set to false it usually means that website_url is the same for different episodes
     episode ||= PodcastEpisode.where(website_url: item.link).presence if item.link.present? && unique_website_url?
@@ -43,7 +48,7 @@ class Podcast < ApplicationRecord
   end
 
   def image_90
-    ProfileImage.new(self).get(width: 90)
+    Images::Profile.call(profile_image_url, length: 90)
   end
 
   private

@@ -3,7 +3,7 @@
 .crayons-tabs {
   // Setup
   --border-width: 3px;
-  --tab-vertical-padding: var(--su-3);
+  --tab-vertical-padding: var(--su-2);
   --tab-horizontal-padding: var(--su-2);
   --font-size: var(--fs-base);
   display: flex;
@@ -13,9 +13,10 @@
   }
 
   &--scrollable {
-    overflow-y: auto;
+    overflow-x: auto;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
   }
 
   &__item {
@@ -31,6 +32,8 @@
     border-radius: var(--radius);
     transition: all var(--transition-props);
     width: 100%;
+    border: none;
+    background: transparent;
 
     @media (min-width: $breakpoint-s) {
       width: auto;

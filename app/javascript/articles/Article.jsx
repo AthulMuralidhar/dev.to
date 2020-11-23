@@ -21,6 +21,7 @@ export const Article = ({
   isFeatured,
   isBookmarked,
   bookmarkClick,
+  feedStyle,
 }) => {
   if (article && article.type_of === 'podcast_episodes') {
     return <PodcastArticle article={article} />;
@@ -37,24 +38,35 @@ export const Article = ({
     'crayons-story__tertiary',
   ];
 
+  const showCover =
+    (isFeatured || (feedStyle === 'rich' && article.main_image)) &&
+    !article.cloudinary_video_url;
+
   return (
     <article
-      className={`crayons-story cursor-pointer ${
-        isFeatured && 'crayons-story--featured'
+      className={`crayons-story cursor-pointer${
+        isFeatured ? ' crayons-story--featured' : ''
       }`}
-      id={isFeatured && 'featured-story-marker'}
-      data-featured-article={isFeatured && `articles-${article.id}`}
+      id={isFeatured ? 'featured-story-marker' : `article-${article.id}`}
       data-content-user-id={article.user_id}
     >
+      <a
+        href={article.path}
+        aria-labelledby={`article-link-${article.id}`}
+        className="crayons-story__hidden-navigation-link"
+      >
+        {article.title}
+      </a>
       <div
         role="presentation"
         onClick={(event) => {
           const { classList } = event.target;
           if (clickableClassList.includes(...classList)) {
-            if (event.which > 1 || event.metaKey || event.ctrlKey) { // Indicates should open in _blank
+            if (event.which > 1 || event.metaKey || event.ctrlKey) {
+              // Indicates should open in _blank
               window.open(article.path, '_blank');
             } else {
-              const fullUrl = window.location.origin + article.path // InstantClick deals with full urls
+              const fullUrl = window.location.origin + article.path; // InstantClick deals with full urls
               InstantClick.preload(fullUrl);
               InstantClick.display(fullUrl);
             }
@@ -63,9 +75,7 @@ export const Article = ({
       >
         {article.cloudinary_video_url && <Video article={article} />}
 
-        {isFeatured && !article.cloudinary_video_url && (
-          <ArticleCoverImage article={article} />
-        )}
+        {showCover && <ArticleCoverImage article={article} />}
         <div className="crayons-story__body">
           <div className="crayons-story__top">
             <Meta article={article} organization={article.organization} />
@@ -73,7 +83,7 @@ export const Article = ({
 
           <div className="crayons-story__indention">
             <ContentTitle article={article} />
-            <TagList tags={article.tag_list} />
+            <TagList tags={article.tag_list} flare_tag={article.flare_tag} />
 
             {article.class_name === 'Article' && (
               // eslint-disable-next-line no-underscore-dangle
@@ -119,11 +129,13 @@ export const Article = ({
 Article.defaultProps = {
   isBookmarked: false,
   isFeatured: false,
+  feedStyle: 'basic',
 };
 
 Article.propTypes = {
   article: articlePropTypes.isRequired,
   isBookmarked: PropTypes.bool,
   isFeatured: PropTypes.bool,
+  feedStyle: PropTypes.string,
   bookmarkClick: PropTypes.func.isRequired,
 };

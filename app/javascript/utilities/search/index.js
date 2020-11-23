@@ -19,14 +19,25 @@ function getParameterByName(name, url = window.location.href) {
   return decodeURIComponent(results[2].replace(/\+/g, ' '));
 }
 
-function getFilterParameters(url) {
-  const filters = getParameterByName('filters', url);
+function getParameters(name, url) {
+  const params = getParameterByName(name, url);
 
-  if (filters) {
-    return `&filters=${filters}`;
+  if (params) {
+    return `&${name}=${params}`;
   }
 
   return '';
+}
+
+function getFilterParameters(url) {
+  return getParameters('filters', url);
+}
+
+function getSortParameters(url) {
+  const sortBy = getParameters('sort_by', url);
+  const sortDirection = getParameters('sort_direction', url);
+
+  return sortBy + sortDirection;
 }
 
 export const hasInstantClick = () => typeof instantClick !== 'undefined';
@@ -46,9 +57,10 @@ export function displaySearchResults({
   const baseUrl = location.origin;
   const sanitizedQuery = fixedEncodeURIComponent(searchTerm);
   const filterParameters = getFilterParameters(location.href);
+  const sortParameters = getSortParameters(location.href);
 
   InstantClick.display(
-    `${baseUrl}/search?q=${sanitizedQuery}${filterParameters}`,
+    `${baseUrl}/search?q=${sanitizedQuery}${filterParameters}${sortParameters}`,
   );
 }
 
@@ -58,7 +70,7 @@ export function getInitialSearchTerm(querystring) {
     matches !== null && matches.length === 2
       ? decodeURIComponent(matches[1].replace(/\+/g, '%20'))
       : '';
-  const query = filterXSS(rawSearchTerm);
+  const query = filterXSS(rawSearchTerm) || '';
   const divForDecode = document.createElement('div');
   divForDecode.innerHTML = query;
 
@@ -74,11 +86,10 @@ export function preloadSearchResults({
   const encodedQuery = fixedEncodeURIComponent(
     searchTerm.replace(/^[ ]+|[ ]+$/g, ''),
   );
-  InstantClick.preload(
-    `${location.origin}/search?q=${encodedQuery}${getFilterParameters(
-      location.href,
-    )}`,
-  );
+  const searchUrl = `${
+    location.origin
+  }/search?q=${encodedQuery}${getFilterParameters(location.href)}`;
+  InstantClick.preload(searchUrl);
 }
 
 export function createSearchUrl(dataHash) {

@@ -3,41 +3,14 @@ require "rails_helper"
 RSpec.describe DataUpdateScript do
   let(:test_directory) { Rails.root.join("spec/support/fixtures/data_update_scripts") }
 
-  it { is_expected.to validate_uniqueness_of(:file_name) }
+  describe "validations" do
+    describe "builtin validations" do
+      subject { create(:data_update_script) }
 
-  it "can constantize all script names" do
-    described_class.load_script_ids # Create DataUpdateScripts in db
-    described_class.filenames.each do |filename|
-      script = described_class.find_by(file_name: filename)
-      expect { script.file_class }.not_to raise_error
-    end
-  end
+      it { is_expected.to validate_presence_of(:file_name) }
+      it { is_expected.to validate_presence_of(:status) }
 
-  it "default orders scripts by name" do
-    script1 = create(:data_update_script, file_name: "456_test_script")
-    script2 = create(:data_update_script, file_name: "123_test_script")
-    expect(described_class.pluck(:id)).to eq([script2.id, script1.id])
-  end
-
-  describe ".load_script_ids" do
-    before { stub_const "#{described_class}::DIRECTORY", test_directory }
-
-    it "creates new DataUpdateScripts from files" do
-      expect do
-        described_class.load_script_ids
-      end.to change(described_class, :count).by(1)
-    end
-
-    it "returns script ids that need to be run" do
-      script = create(:data_update_script)
-      need_running_ids = described_class.load_script_ids
-      expect(need_running_ids).to include(script.id)
-    end
-
-    it "does not return script ids that are running" do
-      script = create(:data_update_script, run_at: Time.current, status: :working)
-      need_running_ids = described_class.load_script_ids
-      expect(need_running_ids).not_to include(script.id)
+      it { is_expected.to validate_uniqueness_of(:file_name) }
     end
   end
 
@@ -58,6 +31,12 @@ RSpec.describe DataUpdateScript do
     it "does not return script ids that are running" do
       script = create(:data_update_script, run_at: Time.current, status: :working)
       expect(described_class.scripts_to_run).not_to include(script)
+    end
+
+    it "orders scripts by name" do
+      create(:data_update_script, file_name: "456_test_script")
+      create(:data_update_script, file_name: "123_test_script")
+      expect(described_class.scripts_to_run.ids).to eq(described_class.scripts_to_run.order(file_name: :asc).ids)
     end
   end
 
@@ -124,10 +103,8 @@ RSpec.describe DataUpdateScript do
 
   describe "#file_path" do
     it "returns correct loadable file_path" do
-      described_class.load_script_ids
-      described_class.filenames.each do |filename|
+      described_class.scripts_to_run.each do |script|
         expect do
-          script = described_class.find_by(file_name: filename)
           require script.file_path
         end.not_to raise_error
       end
